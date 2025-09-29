@@ -18,7 +18,7 @@ fi
 # Function to kill background processes on script exit
 cleanup() {
     echo "🛑 Shutting down services..."
-    kill $API_PID $REACT_PID 2>/dev/null
+    kill $API_PID $NEXT_PID 2>/dev/null
     exit
 }
 
@@ -36,18 +36,18 @@ cd ..
 # Wait a moment for API to start
 sleep 3
 
-# Start React app in background
-echo "🎨 Starting React development server..."
+# Start Next.js app in background
+echo "🎨 Starting Next.js development server..."
 cd web-client
-npm start &
-REACT_PID=$!
+npm run dev &
+NEXT_PID=$!
 cd ..
 
 echo ""
 echo "✅ Development environment started!"
 echo "📊 API Server: http://localhost:8000"
 echo "📊 API Docs: http://localhost:8000/docs"
-echo "🎨 React App: http://localhost:3000"
+echo "🎨 Next.js App: http://localhost:3000"
 echo ""
 echo "Press Ctrl+C to stop all services"
 

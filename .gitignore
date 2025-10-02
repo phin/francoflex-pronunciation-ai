@@ -86,3 +86,5 @@ logs/
 
 # Supabase
 .supabase/
+# Local Netlify folder
+.netlify

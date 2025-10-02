@@ -1,0 +1,29 @@
+[build]
+  base = "web-client"
+  command = "npm run build"
+  publish = "web-client/.next"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--legacy-peer-deps"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Environment variables (set these in Netlify UI)
+# OPENAI_API_KEY
+# SPEECHACE_API_KEY
+# ELEVENLABS_API_KEY
+# NEXT_PUBLIC_SUPABASE_URL
+# NEXT_PUBLIC_SUPABASE_ANON_KEY

@@ -6,6 +6,12 @@
 [build.environment]
   NODE_VERSION = "18"
   NPM_FLAGS = "--legacy-peer-deps"
+  NEXT_PUBLIC_SUPABASE_URL = "https://pznzykwfboqryuibelqs.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6bnp5a3dmYm9xcnl1aWJlbHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTk3MjUsImV4cCI6MjA3NDkzNTcyNX0.BIdyGbIUTzGdMSp7PI9gNiwmLgUmcD9jqBU7LHH5YIU"
+
+[context.production.environment]
+  NEXT_PUBLIC_SUPABASE_URL = "https://pznzykwfboqryuibelqs.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6bnp5a3dmYm9xcnl1aWJlbHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTk3MjUsImV4cCI6MjA3NDkzNTcyNX0.BIdyGbIUTzGdMSp7PI9gNiwmLgUmcD9jqBU7LHH5YIU"
 
 [[redirects]]
   from = "/api/*"
@@ -18,12 +24,10 @@
   status = 200
 
 [functions]
-  directory = "netlify/functions"
+  directory = "api"
   node_bundler = "esbuild"
 
-# Environment variables (set these in Netlify UI)
-# OPENAI_API_KEY
-# SPEECHACE_API_KEY
-# ELEVENLABS_API_KEY
-# NEXT_PUBLIC_SUPABASE_URL
-# NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Set these sensitive keys in Netlify UI (Site settings > Environment variables):
+# OPENAI_API_KEY - Your OpenAI API key
+# SPEECHACE_API_KEY - Your SpeechAce API key
+# ELEVENLABS_API_KEY - Your ElevenLabs API key

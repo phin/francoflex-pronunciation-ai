@@ -34,9 +34,9 @@ export async function handler(event, context) {
     const supabase = getSupabaseClient();
 
     const { data, error } = await supabase
-      .from('user_preferences')
+      .from('preferences')
       .select('*')
-      .eq('user_id', user_id)
+      .eq('user', user_id)  // Column name is "user" not "user_id"
       .single();
 
     if (error && error.code !== 'PGRST116') { // Not found error

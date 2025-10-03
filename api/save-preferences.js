@@ -33,19 +33,19 @@ export async function handler(event, context) {
 
     const supabase = getSupabaseClient();
 
-    // Upsert user preferences
+    // Upsert user preferences (matching the SQL schema)
     const { data, error } = await supabase
-      .from('user_preferences')
+      .from('preferences')
       .upsert({
-        user_id,
-        learning_language: learning,
-        native_language: native,
+        user: user_id,  // Column name is "user" not "user_id"
+        learning: learning,
+        native: native,
         industry,
         job,
         name,
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'user_id'
+        onConflict: 'user'
       })
       .select()
       .single();

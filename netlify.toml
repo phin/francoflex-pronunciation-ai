@@ -13,14 +13,13 @@
   NEXT_PUBLIC_SUPABASE_URL = "https://pznzykwfboqryuibelqs.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6bnp5a3dmYm9xcnl1aWJlbHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTk3MjUsImV4cCI6MjA3NDkzNTcyNX0.BIdyGbIUTzGdMSp7PI9gNiwmLgUmcD9jqBU7LHH5YIU"
 
+# Use Netlify's Next.js plugin for proper routing
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
   status = 200
 
 [functions]

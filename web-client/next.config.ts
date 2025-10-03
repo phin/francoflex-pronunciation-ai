@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // Remove 'export' for Netlify - it handles the build differently
   distDir: '.next',
   images: {
     unoptimized: true,

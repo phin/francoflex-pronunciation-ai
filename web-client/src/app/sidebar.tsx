@@ -278,15 +278,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Avatar className="h-8 w-8">
                     <AvatarImage
                       src="/matt_avatar.png"
-                      alt="MP"
+                      alt={user?.email?.substring(0, 2).toUpperCase() || "MP"}
                     />
-                    <AvatarFallback>MP</AvatarFallback>
+                    <AvatarFallback>{user?.email?.substring(0, 2).toUpperCase() || "MP"}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-heading">
-                      {data.user.name}
+                      {user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}
                     </span>
-                    <span className="truncate text-xs">{data.user.email}</span>
+                    <span className="truncate text-xs">{user?.email || data.user.email}</span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>

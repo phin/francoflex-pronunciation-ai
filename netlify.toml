@@ -26,7 +26,19 @@
   directory = "api"
   node_bundler = "esbuild"
 
-# Set these sensitive keys in Netlify UI (Site settings > Environment variables):
-# OPENAI_API_KEY - Your OpenAI API key
-# SPEECHACE_API_KEY - Your SpeechAce API key
-# ELEVENLABS_API_KEY - Your ElevenLabs API key
+[functions.environment]
+  SPEECHACE_API_ENDPOINT = "https://api.speechace.co"
+  SPEECHACE_REGION = "us-west"
+
+# IMPORTANT: Set these sensitive keys in Netlify UI (Site settings > Environment variables):
+#
+# Required API Keys:
+# - OPENAI_API_KEY: Your OpenAI API key for AI generation
+# - SPEECHACE_API_KEY: Your SpeechAce API key for pronunciation analysis
+# - ELEVENLABS_API_KEY: Your ElevenLabs API key for text-to-speech
+#
+# How to add:
+# 1. Go to: https://app.netlify.com/sites/francoflex-pronunciation-ai/settings/env
+# 2. Click "Add a variable"
+# 3. Add each key-value pair
+# 4. Redeploy the site

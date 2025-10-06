@@ -82,7 +82,7 @@ export async function handler(event, context) {
         .insert({
           user: user_id,
           level: 'beginner',
-          mode: 'repeat',
+          type: 'repeat',
           content: sessionContent,
           created_at: new Date().toISOString()
         })

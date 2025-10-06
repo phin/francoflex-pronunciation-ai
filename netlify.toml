@@ -23,7 +23,7 @@
   status = 200
 
 [functions]
-  directory = "api"
+  directory = "../api"
   node_bundler = "esbuild"
 
 [functions.environment]

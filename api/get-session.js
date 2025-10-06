@@ -1,5 +1,9 @@
 import { getSupabaseClient } from './_utils/supabase.js';
 
+/**
+ * Get or create session for a user
+ * Auto-creates a beginner session if none exists
+ */
 export async function handler(event, context) {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {

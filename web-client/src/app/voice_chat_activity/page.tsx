@@ -242,7 +242,7 @@ export default function VoiceChatActivityPage() {
           // Fallback to most recent session
           const result = await api.getSession(user.id)
           console.log('Session data loaded:', result)
-          
+
           if (result.success && result.data) {
             setSessionData(result.data)
             // Initialize messages with the first question
@@ -257,6 +257,33 @@ export default function VoiceChatActivityPage() {
                   audioUrl: firstQuestion.audio_url,
                 }
               ])
+            }
+          } else if (result.success && !result.data) {
+            // No session exists, create a new one with beginner level
+            console.log('No session found, creating new session...')
+            try {
+              const newSessionResult = await api.createSession(user.id, 'beginner', 'repeat')
+              console.log('New session created:', newSessionResult)
+
+              if (newSessionResult.success && newSessionResult.data) {
+                setSessionData(newSessionResult.data)
+                // Initialize messages with the first question
+                const firstQuestion = newSessionResult.data.content?.[0]
+                if (firstQuestion) {
+                  setMessages([
+                    {
+                      id: "1",
+                      type: "ai",
+                      content: firstQuestion.learning,
+                      timestamp: new Date(),
+                      audioUrl: firstQuestion.audio_url,
+                    }
+                  ])
+                }
+              }
+            } catch (createError) {
+              console.error('Error creating new session:', createError)
+              toast.error('Failed to create a new session')
             }
           }
         }

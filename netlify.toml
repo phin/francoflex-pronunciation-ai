@@ -28,6 +28,8 @@
 [functions.environment]
   SPEECHACE_API_ENDPOINT = "https://api.speechace.co"
   SPEECHACE_REGION = "us-west"
+  NEXT_PUBLIC_SUPABASE_URL = "https://pznzykwfboqryuibelqs.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6bnp5a3dmYm9xcnl1aWJlbHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTk3MjUsImV4cCI6MjA3NDkzNTcyNX0.BIdyGbIUTzGdMSp7PI9gNiwmLgUmcD9jqBU7LHH5YIU"
 
 # IMPORTANT: Set these sensitive keys in Netlify UI (Site settings > Environment variables):
 #

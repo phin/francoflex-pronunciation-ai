@@ -1,6 +1,11 @@
-import axios from 'axios';
-import FormData from 'form-data';
-import { getOpenAIClient, DEFAULT_MODEL } from './_utils/openai.js';
+/**
+ * Netlify Function: Pronunciation Analysis
+ *
+ * HTTP wrapper around the reusable pronunciation analysis module.
+ * The core logic is in /api/_utils/pronunciation/ for easy reuse.
+ */
+
+import { analyzePronunciation } from './_utils/pronunciation/index.js';
 
 export async function handler(event, context) {
   // Handle CORS preflight
@@ -16,80 +21,57 @@ export async function handler(event, context) {
     };
   }
 
+  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ error: 'Method not allowed' })
     };
   }
 
   try {
-    const { audio_url, target_text, analysis_language = 'fr-fr', native_language = 'en' } = JSON.parse(event.body);
+    // Parse request body
+    const {
+      audio_url,
+      target_text,
+      analysis_language = 'fr-fr',
+      native_language = 'en',
+      session_id,
+      feedback_tone = 'encouraging',
+      detailed = false
+    } = JSON.parse(event.body);
 
+    // Validate required fields
     if (!audio_url || !target_text) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'audio_url and target_text are required' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({
+          error: 'audio_url and target_text are required'
+        })
       };
     }
 
-    // Call SpeechAce API
-    const speechaceApiKey = process.env.SPEECHACE_API_KEY;
-    if (!speechaceApiKey) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'SpeechAce API key not configured' })
-      };
-    }
-
-    // Download audio from URL
-    const audioResponse = await axios.get(audio_url, { responseType: 'arraybuffer' });
-    const audioBuffer = Buffer.from(audioResponse.data);
-
-    // Prepare form data for SpeechAce
-    const formData = new FormData();
-    formData.append('user_audio_file', audioBuffer, 'audio.wav');
-    formData.append('text', target_text);
-    formData.append('dialect', analysis_language);
-    formData.append('user_id', 'francoflex_user');
-
-    // Call SpeechAce API
-    const speechaceResponse = await axios.post(
-      'https://api.speechace.co/api/scoring/speech/v9/json',
-      formData,
-      {
-        params: {
-          key: speechaceApiKey,
-          dialect: analysis_language
-        },
-        headers: formData.getHeaders()
-      }
-    );
-
-    const analysisResult = speechaceResponse.data;
-
-    // Generate AI feedback using OpenAI
-    const openai = getOpenAIClient();
-    const overallScore = analysisResult.quality_score || 0;
-
-    const aiResponse = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: `You are a French pronunciation coach. Analyze the pronunciation data and provide helpful, encouraging feedback.`
-        },
-        {
-          role: 'user',
-          content: `The user attempted to say "${target_text}" and received a score of ${overallScore}/100. Provide brief, encouraging feedback with specific tips for improvement.`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 200
+    // Call reusable pronunciation analysis module
+    const result = await analyzePronunciation({
+      audioUrl: audio_url,
+      targetText: target_text,
+      analysisLanguage: analysis_language,
+      nativeLanguage: native_language,
+      includeFeedback: true,
+      feedbackTone: feedback_tone,
+      detailedReport: detailed,
+      userId: session_id
     });
 
-    const aiFeedback = aiResponse.choices[0].message.content;
-
+    // Return success response
     return {
       statusCode: 200,
       headers: {
@@ -99,15 +81,19 @@ export async function handler(event, context) {
       body: JSON.stringify({
         success: true,
         data: {
-          analysis: analysisResult,
-          ai_feedback: aiFeedback,
-          overall_score: overallScore
+          analysis: result.analysis,
+          ai_feedback: result.feedback?.feedback,
+          encouragement: result.feedback?.encouragement,
+          overall_score: result.score,
+          category: result.feedback?.category,
+          metadata: result.metadata
         }
       })
     };
 
   } catch (error) {
     console.error('Pronunciation analysis error:', error);
+
     return {
       statusCode: 500,
       headers: {

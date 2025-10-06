@@ -406,11 +406,12 @@ export default function VoiceChatActivityPage() {
       setIsGenerating(true)
       
       try {
-        // Get session ID from URL parameters
-        const sessionId = searchParams.get('sessionId')
-        
+        // Get session ID from URL parameters or from session data
+        const sessionId = searchParams.get('sessionId') || sessionData?.id
+
         if (!sessionId) {
           console.error('No session ID found')
+          toast.error('No active session found')
           return
         }
         

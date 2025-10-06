@@ -55,7 +55,59 @@ export async function handler(event, context) {
       throw error;
     }
 
-    // Return null if no session found (not an error)
+    // If no session exists, create a new beginner session
+    if (!data) {
+      console.log('No session found, creating new beginner session for user:', user_id);
+
+      const sessionContent = [
+        {
+          learning: "Bonjour, comment allez-vous?",
+          native: "Hello, how are you?",
+          audio_url: null
+        },
+        {
+          learning: "Je m'appelle...",
+          native: "My name is...",
+          audio_url: null
+        },
+        {
+          learning: "Enchanté de vous rencontrer",
+          native: "Nice to meet you",
+          audio_url: null
+        }
+      ];
+
+      const { data: newSession, error: createError } = await supabase
+        .from('sessions')
+        .insert({
+          user: user_id,
+          level: 'beginner',
+          mode: 'repeat',
+          content: sessionContent,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating session:', createError);
+        throw createError;
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({
+          success: true,
+          data: newSession
+        })
+      };
+    }
+
+    // Return existing session
     return {
       statusCode: 200,
       headers: {

@@ -1,7 +1,6 @@
 [build]
-  base = "web-client"
-  command = "npm run build"
-  publish = ".next"
+  command = "npm install && cd web-client && npm install && npm run build"
+  publish = "web-client/.next"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -23,7 +22,7 @@
   status = 200
 
 [functions]
-  directory = "../api"
+  directory = "api"
   node_bundler = "esbuild"
 
 [functions.environment]

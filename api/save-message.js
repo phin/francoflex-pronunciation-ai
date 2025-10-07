@@ -53,16 +53,22 @@ export async function handler(event, context) {
 
     const supabase = getSupabaseClient();
 
-    // Insert message
+    // Insert message (store audio_url in metadata)
+    const messageData = {
+      author: author,
+      session: session_id,
+      content: content,
+      created_at: new Date().toISOString()
+    };
+
+    // Add audio_url to metadata if provided
+    if (audio_url) {
+      messageData.metadata = { audio_url: audio_url };
+    }
+
     const { data, error } = await supabase
       .from('messages')
-      .insert({
-        author: author,
-        session: session_id,
-        content: content,
-        audio_url: audio_url || null,
-        created_at: new Date().toISOString()
-      })
+      .insert(messageData)
       .select()
       .single();
 

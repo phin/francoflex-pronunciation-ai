@@ -29,7 +29,12 @@ export async function handler(event, context) {
     const { author, session_id, content, audio_url, ai_feedback } = JSON.parse(event.body);
 
     // Use ai_feedback as content if content is not provided (for system messages)
-    const messageContent = content || ai_feedback || '';
+    // For system messages without content, use a placeholder
+    let messageContent = content || ai_feedback || '';
+
+    if (!messageContent && author === 'system') {
+      messageContent = '[System message]';
+    }
 
     if (!author || !session_id) {
       return {
@@ -49,7 +54,7 @@ export async function handler(event, context) {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'content or ai_feedback is required' })
+        body: JSON.stringify({ error: 'content or ai_feedback is required for user messages' })
       };
     }
 

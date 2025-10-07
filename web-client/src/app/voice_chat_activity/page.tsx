@@ -767,26 +767,28 @@ export default function VoiceChatActivityPage() {
                               <p className="text-sm text-gray-700">{analysisData.summary}</p>
                                     </div>
                             
-                                <div className="space-y-3">
-                              <h4 className="font-medium">Word Analysis:</h4>
-                                  <div className="flex flex-wrap gap-2">
-                                {analysisData.analysis.word_analysis.map((word: any, index: number) => (
-                                      <Button
-                                        key={index}
-                                        variant="neutral"
-                                        size="sm"
-                                        className="h-8 px-3 text-xs bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                                    onClick={() => setSelectedWord({
-                                      word: word.word,
-                                      score: word.quality_score,
-                                      analysis: word.ai_feedback
-                                    })}
-                                  >
-                                    {word.word}
-                                      </Button>
-                                    ))}
+                                {analysisData.analysis.word_analysis && analysisData.analysis.word_analysis.length > 0 && (
+                                  <div className="space-y-3">
+                                    <h4 className="font-medium">Word Analysis:</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {analysisData.analysis.word_analysis.map((word: any, index: number) => (
+                                        <Button
+                                          key={index}
+                                          variant="neutral"
+                                          size="sm"
+                                          className="h-8 px-3 text-xs bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                                          onClick={() => setSelectedWord({
+                                            word: word.word,
+                                            score: word.quality_score,
+                                            analysis: word.ai_feedback
+                                          })}
+                                        >
+                                          {word.word}
+                                        </Button>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                           </CardContent>
                         </Card>
                                 </div>

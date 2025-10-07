@@ -1,68 +1,47 @@
 import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  successResponse
+} from './_utils/http.js';
+import { requireUserId } from './_utils/auth.js';
 
 /**
  * Get or create session for a user
  * Auto-creates a beginner session if none exists
  */
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['GET'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
-  }
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
 
   try {
-    const { user_id } = event.queryStringParameters || {};
-
-    if (!user_id) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'user_id is required' })
-      };
-    }
+    const params = event.queryStringParameters || {};
+    const userId = requireUserId(params);
 
     const supabase = getSupabaseClient();
 
-    // Get the most recent session for this user
     const { data, error } = await supabase
       .from('sessions')
       .select('*')
-      .eq('user', user_id)
+      .eq('user', userId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) {
-      console.error('Supabase error:', error);
       throw error;
     }
 
-    // If no session exists, create a new beginner session
     if (!data) {
-      console.log('No session found, creating new beginner session for user:', user_id);
-
       const sessionContent = [
         {
           learning: "Bonjour, comment allez-vous?",
@@ -84,7 +63,7 @@ export async function handler(event, context) {
       const { data: newSession, error: createError } = await supabase
         .from('sessions')
         .insert({
-          user: user_id,
+          user: userId,
           level: 'beginner',
           type: 'repeat',
           content: sessionContent,
@@ -94,48 +73,14 @@ export async function handler(event, context) {
         .single();
 
       if (createError) {
-        console.error('Error creating session:', createError);
         throw createError;
       }
 
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({
-          success: true,
-          data: newSession
-        })
-      };
+      return successResponse(newSession, headers);
     }
 
-    // Return existing session
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: data
-      })
-    };
-
+    return successResponse(data, headers);
   } catch (error) {
-    console.error('Get session error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to get session',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to get session');
   }
 }

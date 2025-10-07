@@ -134,12 +134,13 @@ export default function VoiceChatConversationalPage() {
           }
           
           // Save greeting to database
-          await api.saveMessage({
-            author: 'system',
-            session_id: sessionId,
-            content: greetingMessage.content,
-            audio_url: greetingAudioUrl
-          })
+      await api.saveMessage({
+        author: 'system',
+        session_id: sessionId,
+        content: greetingMessage.content,
+        audio_url: greetingAudioUrl,
+        user_id: user.id,
+      })
           
           setMessages([greetingMessage])
         }
@@ -252,7 +253,8 @@ export default function VoiceChatConversationalPage() {
           author: 'user',
           session_id: sessionId,
           content: "[Message vocal]",
-          audio_url: uploadResult.data.audio_url
+          audio_url: uploadResult.data.audio_url,
+          user_id: user.id,
         }
         
         console.log('Saving user message...', userMessage)
@@ -324,7 +326,8 @@ export default function VoiceChatConversationalPage() {
             author: 'system',
             session_id: sessionId,
             content: aiMessage.content,
-            audio_url: responseAudioUrl
+            audio_url: responseAudioUrl,
+            user_id: user.id,
           })
           
           setMessages(prev => [...prev, aiMessage])

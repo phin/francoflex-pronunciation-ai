@@ -4,7 +4,7 @@
 
 ```
 pronunciation-voice-ai/
-├── backend/                    # 🐍 Python Backend
+├── _deprecated_backend/        # 🐍 Legacy Python Backend (deprecated)
 │   ├── api/                   # FastAPI Application
 │   │   ├── __init__.py
 │   │   ├── main.py           # Main API endpoints
@@ -61,7 +61,7 @@ pronunciation-voice-ai/
 
 ## 🎯 Key Directories
 
-### Backend (`/backend/`)
+### Legacy Backend (`/_deprecated_backend/`)
 - **`api/`**: FastAPI application with all REST endpoints
 - **`core/`**: Core AI modules (ElevenLabs, SpeechAce, OpenAI)
 - **`utils/`**: Shared utility functions for data processing
@@ -76,9 +76,9 @@ pronunciation-voice-ai/
 
 ## 🚀 Quick Start Commands
 
-### Backend
+### Legacy Backend (Optional)
 ```bash
-cd backend
+cd _deprecated_backend
 python main.py
 # or
 uvicorn api.main:app --reload
@@ -110,7 +110,7 @@ npm start
 
 ## 🔧 Development Workflow
 
-1. **Backend Development**: Work in `/backend/` directory
+1. **Legacy Backend Development**: Historical FastAPI code lives in `/_deprecated_backend/` (not used in current stack)
 2. **Frontend Development**: Work in `/web-client/` directory
 3. **API Integration**: Backend serves on port 8000, frontend on port 3000
 4. **Testing**: Use the provided startup scripts for full environment
@@ -118,7 +118,7 @@ npm start
 ## 📚 Documentation
 
 - **Main Project**: `README_WEBAPP.md`
-- **Backend**: `backend/README.md`
+- **Legacy Backend**: `_deprecated_backend/README.md`
 - **Frontend**: `web-client/README.md`
 - **Logo Replacement**: `web-client/LOGO_REPLACEMENT.md`
 - **Project Structure**: This file

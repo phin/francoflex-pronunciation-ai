@@ -747,6 +747,14 @@ Still need to create:
 - `get-latest-pronunciation-analysis.js` - Get most recent analysis
 - `generate-greeting.js` - Generate session greeting
 
+### TODO: Simplify Existing API Surface
+**Priority**: Medium
+
+- Consolidate repetitive Netlify function boilerplate (CORS preflight, method guards, JSON responses) into shared helpers to reduce drift.
+- Add centralized auth/authorization validation so endpoints verify `user_id`/`session_id` ownership before touching Supabase.
+- Evaluate which endpoints can be replaced by client-side logic (e.g., the frontend already downloads session content, so `get-next-question` and `update-question-status` can move client-side).
+- Aim for fewer round trips by letting the frontend manage session question navigation locally and using the API only for persistence-heavy operations.
+
 ### TODO: Add API Documentation
 **Priority**: Medium
 

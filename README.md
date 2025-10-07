@@ -24,7 +24,7 @@ A comprehensive web application for practicing French pronunciation using Speech
 
 ```
 francoflex-pronunciation-ai/
-├── backend/                    # FastAPI backend
+├── _deprecated_backend/        # FastAPI backend (legacy)
 │   ├── api/                    # API endpoints
 │   │   ├── ai.py              # AI/LLM endpoints
 │   │   ├── audio.py           # Audio processing
@@ -72,7 +72,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install Python dependencies
-pip install -r backend/requirements.txt
+pip install -r _deprecated_backend/requirements.txt
 ```
 
 ### 3. Frontend Setup
@@ -154,11 +154,11 @@ npm run dev
 
 ## 🔧 Development
 
-### Backend Development
+### Legacy Backend Development (optional)
 
 ```bash
 # Start FastAPI with auto-reload
-cd backend
+cd _deprecated_backend
 source ../venv/bin/activate
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -174,8 +174,8 @@ npm run dev
 ### Running Tests
 
 ```bash
-# Backend tests
-cd backend
+# Legacy backend tests
+cd _deprecated_backend
 python -m pytest tests/
 
 # Frontend tests

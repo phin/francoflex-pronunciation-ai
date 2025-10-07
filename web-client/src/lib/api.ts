@@ -75,6 +75,8 @@ class ApiClient {
     session_id: string;
     content: string;
     audio_url?: string;
+    ai_feedback?: string;
+    user_id: string;
   }) {
     return this.request('/save-message', {
       method: 'POST',
@@ -156,15 +158,15 @@ class ApiClient {
   }
 
   // Questions
-  async updateQuestionStatus(sessionId: string, questionIndex: number, status: string = 'done') {
+  async updateQuestionStatus(sessionId: string, questionIndex: number, userId: string, status: string = 'done') {
     return this.request('/update-question-status', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, question_index: questionIndex, status }),
+      body: JSON.stringify({ session_id: sessionId, question_index: questionIndex, status, user_id: userId }),
     });
   }
 
-  async getNextQuestion(sessionId: string) {
-    return this.request(`/get-next-question?session_id=${sessionId}`);
+  async getNextQuestion(sessionId: string, userId: string) {
+    return this.request(`/get-next-question?session_id=${sessionId}&user_id=${userId}`);
   }
 
   // AI Generation

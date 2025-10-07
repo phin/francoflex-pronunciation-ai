@@ -119,7 +119,7 @@ export default function VoiceChatActivityPage() {
                 
                 // Get the current question index based on completed questions
                 try {
-                  const nextQuestionResult = await api.getNextQuestion(sessionId)
+                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.id)
                   if (nextQuestionResult.success && nextQuestionResult.data) {
                     setCurrentQuestionIndex(nextQuestionResult.data.index)
                   } else {
@@ -165,7 +165,8 @@ export default function VoiceChatActivityPage() {
                       author: 'system',
                       session_id: sessionId,
                       content: greetingResult.data.greeting,
-                      audio_url: undefined
+                      audio_url: undefined,
+                      user_id: user.id,
                     }
                     
                     const greetingSaveResult = await api.saveMessage(greetingMessage)
@@ -187,7 +188,8 @@ export default function VoiceChatActivityPage() {
                       author: 'system',
                       session_id: sessionId,
                       content: firstQuestion.learning,
-                      audio_url: firstQuestion.audio_url
+                      audio_url: firstQuestion.audio_url,
+                      user_id: user.id,
                     }
                     
                     const messageSaveResult = await api.saveMessage(systemMessage)
@@ -431,7 +433,8 @@ export default function VoiceChatActivityPage() {
           author: 'user',
           session_id: sessionId,
           content: "[Message vocal]",
-          audio_url: uploadResult.data.audio_url
+          audio_url: uploadResult.data.audio_url,
+          user_id: user.id,
         }
         
         const saveResult = await api.saveMessage(userMessage)
@@ -498,7 +501,8 @@ export default function VoiceChatActivityPage() {
                   author: 'system',
                   session_id: sessionId,
                   content: analysisResult.data.summary,
-                  audio_url: undefined
+                  audio_url: undefined,
+                  user_id: user.id,
                 }
                 
                 const summarySaveResult = await api.saveMessage(summaryMessage)
@@ -514,11 +518,11 @@ export default function VoiceChatActivityPage() {
                 
                 // Update current question status to done
                 try {
-                  await api.updateQuestionStatus(sessionId, currentQuestionIndex, 'done')
+                  await api.updateQuestionStatus(sessionId, currentQuestionIndex, user.id)
                   console.log(`✅ Updated question ${currentQuestionIndex} status to done`)
                   
                   // Get the next question
-                  const nextQuestionResult = await api.getNextQuestion(sessionId)
+                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.id)
                   console.log('Next question result:', nextQuestionResult)
                   
                   if (nextQuestionResult.success && nextQuestionResult.data) {
@@ -530,7 +534,8 @@ export default function VoiceChatActivityPage() {
                       author: 'system',
                       session_id: sessionId,
                       content: nextQuestion.question.learning,
-                      audio_url: nextQuestion.question.audio_url
+                      audio_url: nextQuestion.question.audio_url,
+                      user_id: user.id,
                     }
                     
                     const nextQuestionSaveResult = await api.saveMessage(nextQuestionMessage)

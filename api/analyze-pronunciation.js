@@ -6,35 +6,33 @@
  */
 
 import { analyzePronunciation } from './_utils/pronunciation/index.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  jsonResponse
+} from './_utils/http.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  // Only allow POST
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    // Parse request body
     const {
       audio_url,
       target_text,
@@ -43,23 +41,12 @@ export async function handler(event, context) {
       session_id,
       feedback_tone = 'encouraging',
       detailed = false
-    } = JSON.parse(event.body);
+    } = payload;
 
-    // Validate required fields
     if (!audio_url || !target_text) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({
-          error: 'audio_url and target_text are required'
-        })
-      };
+      return errorResponse(400, 'audio_url and target_text are required', headers);
     }
 
-    // Call reusable pronunciation analysis module
     const result = await analyzePronunciation({
       audioUrl: audio_url,
       targetText: target_text,
@@ -71,39 +58,18 @@ export async function handler(event, context) {
       userId: session_id
     });
 
-    // Return success response
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: {
-          analysis: result.analysis,
-          ai_feedback: result.feedback?.feedback,
-          encouragement: result.feedback?.encouragement,
-          overall_score: result.score,
-          category: result.feedback?.category,
-          metadata: result.metadata
-        }
-      })
-    };
-
+    return jsonResponse(200, {
+      success: true,
+      data: {
+        analysis: result.analysis,
+        ai_feedback: result.feedback?.feedback,
+        encouragement: result.feedback?.encouragement,
+        overall_score: result.score,
+        category: result.feedback?.category,
+        metadata: result.metadata
+      }
+    }, headers);
   } catch (error) {
-    console.error('Pronunciation analysis error:', error);
-
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to analyze pronunciation',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to analyze pronunciation');
   }
 }

@@ -1,43 +1,48 @@
 import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  jsonResponse
+} from './_utils/http.js';
+import { requireUserId } from './_utils/auth.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    const { learning, native, industry, job, name, user_id } = JSON.parse(event.body);
+    const {
+      learning,
+      native,
+      industry,
+      job,
+      name
+    } = payload;
 
-    if (!user_id) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'user_id is required' })
-      };
-    }
+    const userId = requireUserId(payload);
 
     const supabase = getSupabaseClient();
 
-    // Upsert user preferences (matching the SQL schema)
     const { data, error } = await supabase
       .from('preferences')
       .upsert({
-        user: user_id,  // Column name is "user" not "user_id"
+        user: userId,  // Column name is "user" not "user_id"
         learning: learning,
         native: native,
         industry,
@@ -54,31 +59,12 @@ export async function handler(event, context) {
       throw error;
     }
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        message: 'Preferences saved successfully',
-        data
-      })
-    };
-
+    return jsonResponse(200, {
+      success: true,
+      message: 'Preferences saved successfully',
+      data
+    }, headers);
   } catch (error) {
-    console.error('Save preferences error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to save preferences',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to save preferences');
   }
 }

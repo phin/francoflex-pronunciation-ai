@@ -112,7 +112,7 @@ curl "http://localhost:8888/.netlify/functions/get-preferences?user_id=test123"
 
 ## Python Backend (Reference)
 
-The original Python/FastAPI backend is kept in `backend/` for reference. The Node.js serverless functions in `api/` replicate the core functionality.
+The original Python/FastAPI backend is kept in `_deprecated_backend/` for reference. The Node.js serverless functions in `api/` replicate the core functionality.
 
 ## Deployment Checklist
 

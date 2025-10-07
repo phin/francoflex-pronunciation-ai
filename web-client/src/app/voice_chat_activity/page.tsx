@@ -239,10 +239,10 @@ export default function VoiceChatActivityPage() {
             }
           }
         } else {
-          // Fallback to most recent session
+          // Get most recent session (auto-creates if none exists)
           const result = await api.getSession(user.id)
           console.log('Session data loaded:', result)
-          
+
           if (result.success && result.data) {
             setSessionData(result.data)
             // Initialize messages with the first question
@@ -406,11 +406,12 @@ export default function VoiceChatActivityPage() {
       setIsGenerating(true)
       
       try {
-        // Get session ID from URL parameters
-        const sessionId = searchParams.get('sessionId')
-        
+        // Get session ID from URL parameters or from session data
+        const sessionId = searchParams.get('sessionId') || sessionData?.id
+
         if (!sessionId) {
           console.error('No session ID found')
+          toast.error('No active session found')
           return
         }
         
@@ -766,26 +767,28 @@ export default function VoiceChatActivityPage() {
                               <p className="text-sm text-gray-700">{analysisData.summary}</p>
                                     </div>
                             
-                                <div className="space-y-3">
-                              <h4 className="font-medium">Word Analysis:</h4>
-                                  <div className="flex flex-wrap gap-2">
-                                {analysisData.analysis.word_analysis.map((word: any, index: number) => (
-                                      <Button
-                                        key={index}
-                                        variant="neutral"
-                                        size="sm"
-                                        className="h-8 px-3 text-xs bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                                    onClick={() => setSelectedWord({
-                                      word: word.word,
-                                      score: word.quality_score,
-                                      analysis: word.ai_feedback
-                                    })}
-                                  >
-                                    {word.word}
-                                      </Button>
-                                    ))}
+                                {analysisData.analysis.word_analysis && analysisData.analysis.word_analysis.length > 0 && (
+                                  <div className="space-y-3">
+                                    <h4 className="font-medium">Word Analysis:</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {analysisData.analysis.word_analysis.map((word: any, index: number) => (
+                                        <Button
+                                          key={index}
+                                          variant="neutral"
+                                          size="sm"
+                                          className="h-8 px-3 text-xs bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                                          onClick={() => setSelectedWord({
+                                            word: word.word,
+                                            score: word.quality_score,
+                                            analysis: word.ai_feedback
+                                          })}
+                                        >
+                                          {word.word}
+                                        </Button>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                           </CardContent>
                         </Card>
                                 </div>

@@ -112,13 +112,23 @@ export default function PreferencesPage() {
   }, [user])
 
   const handleSave = async () => {
+    console.log('handleSave called')
+    console.log('Current user:', user)
+
     if (!user) {
+      console.error('No user logged in')
       toast.error("You must be logged in to save preferences")
       return
     }
 
+    // Validate required fields
+    if (!learningLanguage || !nativeLanguage) {
+      toast.error("Please select both learning and native languages")
+      return
+    }
+
     setLoading(true)
-    
+
     try {
       // Prepare data for FastAPI
       const preferencesData = {
@@ -130,16 +140,22 @@ export default function PreferencesPage() {
         user_id: user.id
       }
 
-      console.log('Saving preferences via FastAPI:', preferencesData)
+      console.log('Saving preferences via API:', preferencesData)
 
-      // Call FastAPI endpoint
+      // Call API endpoint
       const result = await api.savePreferences(preferencesData)
-      
+
       console.log('Preferences saved successfully:', result)
+      toast.success("Preferences saved successfully!")
       setShowSuccessDialog(true)
-      
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Error saving preferences:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        error: error
+      })
       toast.error("Failed to save preferences: " + (error.message || "Unknown error"))
     } finally {
       setLoading(false)

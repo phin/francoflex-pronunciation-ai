@@ -26,63 +26,31 @@ export async function handler(event, context) {
   }
 
   try {
-    const { author, session_id, content, audio_url, ai_feedback } = JSON.parse(event.body);
+    const { user_id, level, analysis_content, analysis_type = 'repeat' } = JSON.parse(event.body);
 
-    // Use ai_feedback as content if content is not provided (for system messages)
-    const messageContent = content || ai_feedback || '';
-
-    if (!author || !session_id) {
+    if (!user_id || !level || !analysis_content) {
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ error: 'author and session_id are required' })
-      };
-    }
-
-    if (!messageContent) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'content or ai_feedback is required' })
-      };
-    }
-
-    // Validate author is either 'user' or 'system'
-    if (author !== 'user' && author !== 'system') {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'author must be "user" or "system"' })
+        body: JSON.stringify({ error: 'user_id, level, and analysis_content are required' })
       };
     }
 
     const supabase = getSupabaseClient();
 
-    // Insert message (store audio_url in metadata)
-    const messageData = {
-      author: author,
-      session: session_id,
-      content: messageContent,
-      created_at: new Date().toISOString()
-    };
-
-    // Add audio_url to metadata if provided
-    if (audio_url) {
-      messageData.metadata = { audio_url: audio_url };
-    }
-
+    // Insert pronunciation analysis
     const { data, error } = await supabase
-      .from('messages')
-      .insert(messageData)
+      .from('pronunciation_analysis')
+      .insert({
+        user: user_id,
+        type: analysis_type,
+        level: level,
+        content: analysis_content,
+        created_at: new Date().toISOString()
+      })
       .select()
       .single();
 
@@ -104,7 +72,7 @@ export async function handler(event, context) {
     };
 
   } catch (error) {
-    console.error('Save message error:', error);
+    console.error('Save pronunciation analysis error:', error);
     return {
       statusCode: 500,
       headers: {
@@ -112,7 +80,7 @@ export async function handler(event, context) {
         'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
-        error: 'Failed to save message',
+        error: 'Failed to save pronunciation analysis',
         details: error.message
       })
     };

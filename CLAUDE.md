@@ -14,8 +14,8 @@ Francoflex is an AI-powered French pronunciation training application with a **d
 **Key Technologies:**
 - Frontend: Next.js 14 (App Router), TypeScript, Tailwind CSS, Radix UI
 - Backend: Netlify Functions (JavaScript/Node.js)
-- Database: Supabase (PostgreSQL with Row Level Security)
-- Storage: Supabase Storage (audio files)
+- Database: Firebase (Firestore for sessions/messages, Realtime Database for user profiles)
+- Storage: Firebase Storage (audio files)
 - AI Services: OpenAI GPT-4, SpeechAce API, ElevenLabs TTS
 - Deployment: Netlify (frontend + serverless functions)
 
@@ -53,12 +53,10 @@ cd web-client && npm run dev
 netlify functions:serve
 ```
 
-### Database
-```bash
-# Run Supabase schema (one-time setup)
-# Copy contents of supabase_schema.sql and run in Supabase SQL Editor
-# URL: https://supabase.com/dashboard/project/pznzykwfboqryuibelqs/editor
-```
+### Firebase Project Notes
+- Firestore collections: `sessions`, `messages`, `pronunciation_analysis`
+- Realtime Database path: `/users/{uid}` (profile + preference data)
+- Storage bucket: `gs://madameai-firebasestorage.app` (audio uploads under `{uid}/{sessionId}/...`)
 
 ---
 
@@ -115,8 +113,8 @@ export async function handler(event) {
 
 **Key Files:**
 - `src/lib/api.ts`: Centralized API client for all backend calls
-- `src/lib/supabase.ts`: Frontend Supabase client (uses anon key)
-- `src/contexts/AuthContext.tsx`: Authentication context (Supabase Auth)
+- `src/lib/firebase.ts`: Frontend Firebase config
+- `src/contexts/AuthContext.tsx`: Authentication context (Firebase Auth + query-token login)
 
 **API Client Pattern:**
 ```typescript
@@ -127,7 +125,7 @@ const result = await api.getSession(user.id);
 const upload = await api.uploadAudio(file, user.id, sessionId);
 ```
 
-### 3. Database Schema (Supabase)
+### 3. Data Model (Firebase)
 
 **Tables:**
 - `preferences`: User preferences (1:1 with user, UUID "user" column)
@@ -182,7 +180,7 @@ if (!data) {
 1. Frontend records audio → Blob
 2. Convert to File: `new File([blob], 'recording.wav', { type: 'audio/wav' })`
 3. Upload via `api.uploadAudio(file, userId, sessionId)`
-4. `upload-audio.js` uploads to Supabase Storage bucket: `audio/{userId}/{sessionId}/{timestamp}-{filename}`
+4. `upload-audio.js` uploads to Firebase Storage bucket: `{userId}/{sessionId}/{timestamp}-{filename}`
 5. Returns public URL
 6. Save message with audio_url in metadata
 
@@ -196,7 +194,7 @@ if (!data) {
 **Complete Flow:**
 ```
 1. User records audio
-2. upload-audio → Supabase Storage → returns audio_url
+2. upload-audio → Firebase Storage → returns audio_url
 3. save-message → stores user message with audio_url in metadata
 4. analyze-pronunciation (called separately):
    - Downloads audio from URL
@@ -214,21 +212,31 @@ if (!data) {
 ### 4. Environment Variables
 
 **Build Time** (set in `netlify.toml` or Netlify UI):
-- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon key (client-side)
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_DATABASE_URL`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 
 **Runtime** (Netlify Functions - **must be set in Netlify UI**):
-- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (bypasses RLS) ⚠️
-- `OPENAI_API_KEY`: OpenAI API key
-- `SPEECHACE_API_KEY`: SpeechAce API key
-- `ELEVENLABS_API_KEY`: ElevenLabs TTS key (optional)
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY` (escape newlines as `\n`)
+- `FIREBASE_DATABASE_URL`
+- `OPENAI_API_KEY`
+- `SPEECHACE_API_KEY`
+- `ELEVENLABS_API_KEY`
 
 **Local Development:**
 Create `.env` in root:
 ```env
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+FIREBASE_PROJECT_ID=your_project_id
+FIREBASE_CLIENT_EMAIL=service-account@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nABC123...\n-----END PRIVATE KEY-----\n"
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
 OPENAI_API_KEY=your_openai_key
 SPEECHACE_API_KEY=your_speechace_key
+ELEVENLABS_API_KEY=your_elevenlabs_key
 ```
 
 ### 5. CORS Headers
@@ -265,15 +273,16 @@ headers: {
 1. Create `api/{function-name}.js`
 2. Export `handler(event, context)` function
 3. Add CORS handling (OPTIONS method)
-4. Use `getSupabaseClient()` from `api/_utils/supabase.js`
+4. Import `getFirestoreClient()` / `getRealtimeDatabase()` / `requireAuth()` helpers as needed
 5. Return proper response with CORS headers
 6. Deploy triggers automatic rebuild
 
 **Template:**
 ```javascript
-import { getSupabaseClient } from './_utils/supabase.js';
+import { requireAuth } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
-export async function handler(event, context) {
+export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -287,10 +296,12 @@ export async function handler(event, context) {
   }
 
   try {
-    const { param1, param2 } = JSON.parse(event.body);
-    const supabase = getSupabaseClient();
+    const { uid } = await requireAuth(event);
+    const db = getFirestoreClient();
+    const payload = event.body ? JSON.parse(event.body) : {};
 
-    // Your logic here
+    // Your logic here (read/write Firestore/Realtime DB)
+    await db.collection('example').doc(uid).set({ payload }, { merge: true });
 
     return {
       statusCode: 200,
@@ -332,12 +343,11 @@ import { api } from '@/lib/api';
 const result = await api.functionName({ param1, param2 });
 ```
 
-### Modifying Database Schema
+### Modifying Data Models
 
-1. Write SQL in `supabase_schema.sql`
-2. Run in Supabase SQL Editor (https://supabase.com/dashboard/project/pznzykwfboqryuibelqs/editor)
-3. Update RLS policies if needed
-4. If adding columns to existing tables, check if functions need updates
+1. Firestore collections (`sessions`, `messages`, `pronunciation_analysis`) can be managed via Firebase Console or `firebase firestore:indexes` / Admin SDK migrations.
+2. Realtime Database structure lives under `/users/{uid}` (profile + `preferences` subtree). Use Admin SDK or the Firebase Console for bulk changes.
+3. Update serverless functions to reflect any new fields, and review security rules (`firestore.rules`, `storage.rules`) after structural changes.
 
 ### Debugging Netlify Functions
 
@@ -404,18 +414,20 @@ netlify deploy --prod
 
 **Configuration:**
 - `netlify.toml`: Netlify build settings, functions directory, env vars
-- `supabase_schema.sql`: Database schema (run once in Supabase)
+- `firestore.rules`, `storage.rules`: Firebase security rules
+- `supabase_schema.sql`: Legacy (unused) Supabase schema
 - `package.json` (root): API function dependencies
 - `web-client/package.json`: Frontend dependencies
 
 **Documentation:**
 - `api/API.md`: Complete pronunciation analysis API documentation
 - `README.md`: Project overview, setup instructions
-- `SUPABASE_SETUP.md`: Supabase configuration guide (if exists)
+- `SUPABASE_SETUP.md`: Legacy Supabase configuration guide (kept for reference)
 - `NETLIFY_SETUP.md`: Netlify deployment guide (if exists)
 
 **Core Backend:**
-- `api/_utils/supabase.js`: Supabase client (service role)
+- `api/_utils/firestore.js`: Firestore, Storage, and Realtime Database helpers
+- `api/_utils/auth.js`: Firebase token verification + authorization utilities
 - `api/_utils/pronunciation/index.js`: Main pronunciation analysis orchestrator
 - `api/analyze-pronunciation.js`: HTTP wrapper for pronunciation analysis
 
@@ -562,7 +574,7 @@ Still need to create:
 **Priority**: Medium
 
 - Consolidate repetitive Netlify function boilerplate (CORS preflight, method guards, JSON responses) into shared helpers to reduce drift.
-- Add centralized auth/authorization validation so endpoints verify `user_id`/`session_id` ownership before touching Supabase.
+- Ensure Firebase access helpers (auth + Firestore/Realtime DB) are used consistently across functions.
 - Evaluate which endpoints can be replaced by client-side logic (e.g., the frontend already downloads session content, so `get-next-question` and `update-question-status` can move client-side).
 - Aim for fewer round trips by letting the frontend manage session question navigation locally and using the API only for persistence-heavy operations.
 

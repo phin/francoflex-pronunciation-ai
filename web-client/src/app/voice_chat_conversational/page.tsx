@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
@@ -105,7 +105,7 @@ interface Message {
   nativeTranslation?: string
 }
 
-export default function VoiceChatConversationalPage() {
+function VoiceChatConversationalContent() {
   const searchParams = useSearchParams()
   const { user } = useAuth()
   const sessionId = searchParams.get('sessionId')
@@ -895,5 +895,20 @@ export default function VoiceChatConversationalPage() {
       
       <Toaster position="top-right" />
     </div>
+  )
+}
+
+export default function VoiceChatConversationalPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-sm text-gray-600">Loading conversation...</p>
+        </div>
+      </div>
+    }>
+      <VoiceChatConversationalContent />
+    </Suspense>
   )
 }

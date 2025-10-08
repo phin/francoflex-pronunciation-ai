@@ -18,7 +18,7 @@ A comprehensive web application for practicing French pronunciation using Speech
 - **Frontend**: Next.js with React and TypeScript
 - **Authentication**: Firebase Authentication (email/password, custom tokens)
 - **Styling**: Tailwind CSS with Radix UI components
-- **Database**: Supabase (PostgreSQL)
+- **Database**: Firebase (Firestore + Realtime Database)
 - **AI Services**: OpenAI GPT, SpeechAce API, ElevenLabs TTS
 
 ## 📁 Project Structure
@@ -99,11 +99,7 @@ SPEECHACE_API_KEY=your_speechace_api_key_here
 # ElevenLabs API Key for text-to-speech
 ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Firebase Authentication
+# Firebase Authentication / Database
 FIREBASE_PROJECT_ID=your_firebase_project_id
 FIREBASE_CLIENT_EMAIL=service-account@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nABC123...\n-----END PRIVATE KEY-----\n"
@@ -140,7 +136,7 @@ Add the production (`madameai`) values in Netlify, along with `FIREBASE_PROJECT_
 1. **OpenAI API**: Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
 2. **SpeechAce API**: Sign up at [SpeechAce](https://www.speechace.com/) and get your API key
 3. **ElevenLabs API**: Get your API key from [ElevenLabs](https://elevenlabs.io/)
-4. **Supabase**: Set up a project at [Supabase](https://supabase.com/)
+4. **Firebase**: Project created earlier in the console (no extra action needed here)
 
 ## 🚀 Running the Application
 
@@ -294,4 +290,4 @@ For issues and questions:
 - [SpeechAce](https://www.speechace.com/) for pronunciation analysis
 - [OpenAI](https://openai.com/) for AI-powered feedback
 - [ElevenLabs](https://elevenlabs.io/) for text-to-speech
-- [Supabase](https://supabase.com/) for backend services
+- [Firebase Docs](https://firebase.google.com/docs) for backend services

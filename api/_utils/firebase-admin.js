@@ -22,7 +22,11 @@ export function getFirebaseApp() {
         const privateKey = getRequiredEnvVar('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n');
         const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
-        console.log('Initializing Firebase Admin SDK with project:', projectId);
+        console.log(
+          'Initializing Firebase Admin SDK with project:',
+          projectId,
+          databaseURL ? `(databaseURL: ${databaseURL})` : ''
+        );
 
         const config = {
           credential: cert({ projectId, clientEmail, privateKey }),

@@ -23,6 +23,13 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+export class UnauthorizedError extends HttpError {
+  constructor(message, details) {
+    super(401, message || 'Unauthorized', details);
+    this.name = 'UnauthorizedError';
+  }
+}
+
 export class NotFoundError extends HttpError {
   constructor(message, details) {
     super(404, message || 'Not found', details);

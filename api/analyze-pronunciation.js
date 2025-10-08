@@ -14,6 +14,7 @@ import {
   handleError,
   jsonResponse
 } from './_utils/http.js';
+import { requireAuth } from './_utils/auth.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -33,6 +34,8 @@ export async function handler(event, context) {
   }
 
   try {
+    await requireAuth(event);
+
     const {
       audio_url,
       target_text,

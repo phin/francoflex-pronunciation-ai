@@ -22,11 +22,10 @@ import {
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Mic, Send, Volume2, Square, RotateCcw, CheckCircle, AlertCircle, Play, Pause, BarChart3, ChevronDown } from "lucide-react"
+import { Mic, Send, Volume2, Square, RotateCcw, AlertCircle, Play, Pause, BarChart3 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +36,64 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import Image from "next/image"
+
+interface SessionQuestion {
+  learning: string
+  native: string
+  status?: string
+  audio_url?: string | null
+}
+
+interface SessionSummary {
+  id: string
+  user: string
+  level: string
+  type: string
+  mode?: string
+  content?: SessionQuestion[]
+  created_at?: string
+}
+
+interface StoredMessage {
+  id: string
+  author: "system" | "user"
+  content: string
+  session: string
+  metadata?: {
+    audio_url?: string
+  } | null
+  created_at: string
+}
+
+interface UserPreferences {
+  name?: string | null
+  learning?: string | null
+  learningLabel?: string | null
+  native?: string | null
+  nativeLabel?: string | null
+  level?: string | null
+  age?: string | null
+  learningGoals?: string | null
+}
+
+interface ConversationalAnalysis {
+  overall_score?: number
+  summary?: string
+  encouragement?: string
+  ai_feedback?: string
+  word_analysis?: {
+    word: string
+    score?: number
+    feedback?: string
+    status?: string
+  }[]
+}
+
+interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string | null
+}
 
 interface Message {
   id: string
@@ -60,18 +117,18 @@ export default function VoiceChatConversationalPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isPlayingRecording, setIsPlayingRecording] = useState(false)
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
-  const [selectedWord, setSelectedWord] = useState<{word: string, score: number, analysis: string} | null>(null)
+  const [selectedWord, setSelectedWord] = useState<{ word: string; score: number; analysis: string } | null>(null)
   
   // Translation drawer state
   const [translationDrawerOpen, setTranslationDrawerOpen] = useState(false)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   
   // Session data
-  const [sessionData, setSessionData] = useState<any>(null)
+  const [sessionData, setSessionData] = useState<SessionSummary | null>(null)
   const [loading, setLoading] = useState(true)
   
   // Analysis data
-  const [analysisData, setAnalysisData] = useState<any>(null)
+  const [analysisData, setAnalysisData] = useState<ConversationalAnalysis | null>(null)
   const [analysisReady, setAnalysisReady] = useState(false)
   
   const [messages, setMessages] = useState<Message[]>([])
@@ -87,13 +144,20 @@ export default function VoiceChatConversationalPage() {
       try {
         setLoading(true)
         
-        // Load messages from database
-        const messagesResult = await api.getMessagesFromSession(sessionId)
-        const dbMessages = messagesResult.data || []
-        
+        const sessionsResult = await api.getAllSessions(user.uid) as ApiResponse<SessionSummary[]>
+        const session = Array.isArray(sessionsResult.data)
+          ? sessionsResult.data.find((s) => s.id === sessionId)
+          : undefined
+        if (session) {
+          setSessionData(session)
+        }
+
+        const messagesResult = await api.getMessagesFromSession(sessionId) as ApiResponse<StoredMessage[]>
+        const dbMessages = Array.isArray(messagesResult.data) ? messagesResult.data : []
+
         if (dbMessages.length > 0) {
           // Convert database messages to UI format
-          const uiMessages = dbMessages.map((msg: any) => ({
+          const uiMessages: Message[] = dbMessages.map((msg: StoredMessage) => ({
             id: msg.id,
             type: msg.author === 'user' ? 'user' : 'ai',
             content: msg.content,
@@ -106,15 +170,15 @@ export default function VoiceChatConversationalPage() {
         } else {
           // No messages exist, create initial greeting
           // Get user preferences for personalized greeting
-          const userPrefs = await api.getPreferences(user.id)
-          const userPref = userPrefs.data?.[0]
-          
+        const userPrefs = await api.getPreferences(user.uid) as ApiResponse<UserPreferences | null>
+        const userPref = userPrefs.data
+
           // Generate personalized greeting
           const greetingResult = await api.generateGreeting({
             user_name: userPref?.name || 'User',
             learning_language: userPref?.learning || 'fr',
-            session_content: [],
-            level: sessionData?.level || 'B1'
+            session_content: session?.content || [],
+            level: session?.level || 'B1'
           })
           
           const greetingText = greetingResult.data.greeting
@@ -134,25 +198,21 @@ export default function VoiceChatConversationalPage() {
           }
           
           // Save greeting to database
-      await api.saveMessage({
-        author: 'system',
-        session_id: sessionId,
-        content: greetingMessage.content,
-        audio_url: greetingAudioUrl,
-        user_id: user.id,
-      })
+          await api.saveMessage({
+            author: 'system',
+            session_id: sessionId,
+            content: greetingMessage.content,
+            audio_url: greetingAudioUrl,
+            user_id: user.uid,
+          })
           
           setMessages([greetingMessage])
         }
         
         // Load session data
-        const sessionsResult = await api.getAllSessions(user.id)
-        const session = sessionsResult.data?.find((s: any) => s.id === sessionId)
-        setSessionData(session)
-        
         // Load latest pronunciation analysis
         try {
-          const analysisResult = await api.getLatestPronunciationAnalysis(user.id)
+          const analysisResult = await api.getLatestPronunciationAnalysis(user.uid) as ApiResponse<{ content: ConversationalAnalysis }>
           if (analysisResult.success && analysisResult.data) {
             setAnalysisData(analysisResult.data.content)
             setAnalysisReady(true)
@@ -234,7 +294,7 @@ export default function VoiceChatConversationalPage() {
       setIsGenerating(true)
       
       try {
-        console.log('Starting recording processing...', { user: user.id, sessionId })
+        console.log('Starting recording processing...', { user: user.uid, sessionId })
         
         // Convert Blob to File
         const audioFile = new File([recordedAudio], 'recording.wav', {
@@ -245,7 +305,7 @@ export default function VoiceChatConversationalPage() {
         
         // Upload audio to backend
         console.log('Uploading audio...')
-        const uploadResult = await api.uploadAudio(audioFile, user.id, sessionId)
+        const uploadResult = await api.uploadAudio(audioFile, user.uid, sessionId)
         console.log('Audio upload result:', uploadResult)
         
         // Save user message to database
@@ -254,7 +314,7 @@ export default function VoiceChatConversationalPage() {
           session_id: sessionId,
           content: "[Message vocal]",
           audio_url: uploadResult.data.audio_url,
-          user_id: user.id,
+          user_id: user.uid,
         }
         
         console.log('Saving user message...', userMessage)
@@ -297,7 +357,7 @@ export default function VoiceChatConversationalPage() {
             session_id: sessionId,
             learning_language: 'fr',
             level: sessionData?.level || 'B1',
-            user_id: user.id
+            user_id: user.uid
           })
           console.log('Conversational response result:', responseResult)
           
@@ -327,7 +387,7 @@ export default function VoiceChatConversationalPage() {
             session_id: sessionId,
             content: aiMessage.content,
             audio_url: responseAudioUrl,
-            user_id: user.id,
+            user_id: user.uid,
           })
           
           setMessages(prev => [...prev, aiMessage])
@@ -345,7 +405,7 @@ export default function VoiceChatConversationalPage() {
             if (analysisResult.success) {
               // Save analysis to database
               await api.savePronunciationAnalysis({
-                user_id: user.id,
+                user_id: user.uid,
                 level: sessionData?.level || 'B1',
                 analysis_content: analysisResult.data.analysis,
                 analysis_type: 'conversational'
@@ -477,7 +537,7 @@ export default function VoiceChatConversationalPage() {
                     <SheetHeader className="flex-shrink-0">
                       <SheetTitle>Analyse de Prononciation</SheetTitle>
                       <SheetDescription>
-                        Consultez l'analyse détaillée de vos réponses
+                        Consultez l&apos;analyse détaillée de vos réponses
                       </SheetDescription>
                     </SheetHeader>
                     <div className="flex-1 overflow-y-auto mt-8 space-y-6 px-4 pr-2">
@@ -508,7 +568,7 @@ export default function VoiceChatConversationalPage() {
                               <div className="space-y-3">
                                 <h4 className="font-medium">Word Analysis:</h4>
                                 <div className="flex flex-wrap gap-2">
-                                  {analysisData.word_analysis && analysisData.word_analysis.map((word: any, index: number) => (
+                                {analysisData.word_analysis && analysisData.word_analysis.map((word, index) => (
                                     <Button
                                       key={index}
                                       variant="neutral"
@@ -662,7 +722,7 @@ export default function VoiceChatConversationalPage() {
                   <div className="bg-secondary-background border-border border-2 rounded-base p-4">
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-main"></div>
-                      <span className="text-sm text-muted-foreground">L'assistant tape...</span>
+                      <span className="text-sm text-muted-foreground">L&apos;assistant tape...</span>
                     </div>
                   </div>
                 </div>
@@ -744,11 +804,11 @@ export default function VoiceChatConversationalPage() {
                     </p>
                   ) : recordedAudio ? (
                     <p className="text-sm text-green-600 font-medium">
-                      ✅ Enregistrement terminé - Écoutez avant d'envoyer
+                    ✅ Enregistrement terminé - Écoutez avant d&apos;envoyer
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      Appuyez sur le micro pour commencer l'enregistrement
+                    Appuyez sur le micro pour commencer l&apos;enregistrement
                     </p>
                   )}
                 </div>
@@ -790,7 +850,7 @@ export default function VoiceChatConversationalPage() {
           <AlertDialogContent className="max-w-md">
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
-                <span className="text-lg font-semibold">"{selectedWord?.word}"</span>
+                <span className="text-lg font-semibold">&ldquo;{selectedWord?.word}&rdquo;</span>
                 <Badge 
                   className={`${
                     selectedWord && selectedWord.score >= 80 

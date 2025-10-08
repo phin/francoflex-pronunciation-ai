@@ -16,6 +16,7 @@ A comprehensive web application for practicing French pronunciation using Speech
 
 - **Backend**: FastAPI with Python
 - **Frontend**: Next.js with React and TypeScript
+- **Authentication**: Firebase Authentication (email/password, custom tokens)
 - **Styling**: Tailwind CSS with Radix UI components
 - **Database**: Supabase (PostgreSQL)
 - **AI Services**: OpenAI GPT, SpeechAce API, ElevenLabs TTS
@@ -101,7 +102,38 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Firebase Authentication
+FIREBASE_PROJECT_ID=your_firebase_project_id
+FIREBASE_CLIENT_EMAIL=service-account@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nABC123...\n-----END PRIVATE KEY-----\n"
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id
+NEXT_PUBLIC_FIREBASE_DATABASE_URL=your_firebase_database_url
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=optional_measurement_id
+FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
 ```
+
+> 🛠 **Local development defaults**
+>
+> If the `NEXT_PUBLIC_FIREBASE_*` variables above are omitted, the app falls back to the `madameai-dev` Firebase project when running locally:
+>
+> ```env
+> NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDBczhS0XYJCVhM3-WemvSFaWliSkjLRIM
+> NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=madameai-dev.firebaseapp.com
+> NEXT_PUBLIC_FIREBASE_DATABASE_URL=https://madameai-dev-default-rtdb.firebaseio.com
+> NEXT_PUBLIC_FIREBASE_PROJECT_ID=madameai-dev
+> NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=madameai-dev.firebasestorage.app
+> NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=115515011999
+> NEXT_PUBLIC_FIREBASE_APP_ID=1:115515011999:web:26f6328246216339b283aa
+> ```
+
+Add the production (`madameai`) values in Netlify, along with `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, and `FIREBASE_STORAGE_BUCKET`.
 
 ### 5. Get API Keys
 
@@ -128,6 +160,35 @@ This will start:
 - **FastAPI Server**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 - **Next.js App**: http://localhost:3000
+
+> ℹ️ **Single Sign-On Tokens**  
+> Supply a Firebase custom token in the URL (e.g. `http://localhost:3000/voice_chat_activity?token=YOUR_TOKEN`) to automatically authenticate the user. If no token is present, the standard email/password flow is shown.
+
+#### Token-Based Authentication Flow
+
+1. Generate a Firebase custom token on your backend (e.g. `auth.createCustomToken(uid, claims)` in Firebase Admin).
+2. Redirect or link the learner to the desired Francoflex route with `?token=<CUSTOM_TOKEN>` appended.
+3. The frontend signs in with `signInWithCustomToken`, removes the query parameter, and continues the session. If a user is already authenticated, the token is ignored after cleanup.
+
+Invalid or expired tokens are logged to the console and fall back to the standard email/password sign-in screen.
+
+### Firebase Security Rules
+
+- Firestore rules (`firestore.rules`) restrict access so that only `request.auth.uid` matching the owner can read/write their profile document (`/users/{uid}`), sessions, messages, and pronunciation analysis records.
+- Storage rules (`storage.rules`) limit reads/writes under `<bucket>/<userId>/…` to the authenticated owner.
+
+Deploy the rules with the Firebase CLI:
+
+```bash
+npm install -g firebase-tools   # once
+firebase login
+firebase use madameai           # or madameai-dev locally
+
+firebase deploy --only firestore:rules
+firebase deploy --only storage:rules
+```
+
+Netlify functions use the Firebase Admin SDK, so they bypass these rules while end-user clients remain sandboxed.
 
 ### Production Mode
 

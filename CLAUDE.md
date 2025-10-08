@@ -74,32 +74,36 @@ netlify functions:serve
 **Key Pattern:**
 ```javascript
 // api/{function-name}.js
-export async function handler(event, context) {
-  // CORS handling
-  if (event.httpMethod === 'OPTIONS') { /* ... */ }
+import { requireAuth } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
-  // Business logic
-  const supabase = getSupabaseClient(); // Uses service role key server-side
+export async function handler(event) {
+  const firestore = getFirestoreClient();
+  const { uid } = await requireAuth(event);
 
-  // Return response with CORS headers
+  // Business logic using Firestore / Firebase Storage
+  const doc = await firestore.collection('...').doc('...').get();
+
   return {
     statusCode: 200,
     headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ success: true, data: result })
+    body: JSON.stringify({ success: true, data: doc.data() })
   };
 }
 ```
 
 **Shared Utilities** (`/api/_utils/`):
-- `supabase.js`: Supabase client (uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS)
+- `firebase-admin.js`: Initializes the Firebase admin SDK
+- `firestore.js`: Helpers for Firestore + Firebase Storage buckets
+- `auth.js`: Firebase token verification + session ownership checks
 - `openai.js`: OpenAI client for AI feedback
 - `speechace.js`: SpeechAce API client for pronunciation scoring
 - `pronunciation/`: Modular pronunciation analysis system (see `api/API.md`)
 
-**Critical: Service Role Key vs Anon Key**
-- Netlify functions use `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS for server operations)
-- Frontend uses `NEXT_PUBLIC_SUPABASE_ANON_KEY` (enforces RLS)
-- This is intentional - server can create sessions for users, but enforces security via user_id validation
+**Auth & Data Access**
+- Netlify functions expect a Firebase ID token in the `Authorization` header
+- Frontend retrieves tokens via Firebase Auth (email/password or custom token in query string)
+- Firestore documents use the Firebase UID as the primary identifier for user-owned data
 
 ### 2. Frontend Architecture
 
@@ -435,7 +439,7 @@ See the dedicated sections at the end of this file for:
 
 ### TODO: Stricter CORS Policy
 **Priority**: High
-**Status**: Not Started
+**Status**: In Progress (Firebase auth implemented, data migration pending)
 **Current State**: All 8 API functions use `'Access-Control-Allow-Origin': '*'` which allows requests from any domain.
 
 **Why This Matters**:
@@ -507,224 +511,31 @@ See the dedicated sections at the end of this file for:
 
 ---
 
-### TODO: Migrate to Firebase Authentication
+### TODO: Migrate to Firebase Authentication & Storage
 **Priority**: Medium
-**Status**: Not Started
-**Current State**: Using Supabase Auth with Row Level Security policies
+**Status**: In Progress
+**Current State**: Firebase Auth + Firestore/Storage live; Supabase retained temporarily for manual migration
 
-**Why This Matters**:
-- Firebase offers better OAuth provider support (Google, Apple, Twitter, etc.)
-- More flexible authentication rules and custom claims
-- Better integration with other Google Cloud services
-- Simpler token validation in serverless functions
-- Better developer experience with Firebase Console
+**Completed**:
+- Firebase client/admin SDKs wired up with query-token login support
+- All Netlify functions now read/write Firestore instead of Supabase
+- Audio uploads stream directly to Firebase Storage (public URLs via Google Cloud Storage)
+- Local development auto-falls back to `madameai-dev` Firebase project when env vars are missing
+- User profile/preferences now live in Realtime DB (`/users/{uid}` + `/users/{uid}/preferences`) instead of Firestore
 
-**Considerations**:
-- Keep Supabase for database and storage (only replace auth)
-- User migration may require email verification
-- Potential short downtime during migration
+**Remaining Work**:
+1. Export Supabase data and import into Firebase (manual/one-off process handled outside the repo)
+2. Verify Firestore collections, Realtime DB (`/users/...`), and Firebase Storage buckets, then switch the production app to the Firebase dataset
+3. Remove Supabase environment variables + dependencies once confirmed, and revoke unused Supabase keys
+4. End-to-end regression testing (auth flows, session creation, messaging, pronunciation analysis, audio upload/playback)
+5. Update operational runbooks/monitoring to point at Firebase instead of Supabase
+6. Deploy `firestore.rules` and `storage.rules` so client access stays scoped to the signed-in user
 
-**Work Needed**:
-
-#### Phase 1: Firebase Setup (1-2 hours)
-
-1. **Create Firebase Project**
-   - Go to https://console.firebase.google.com
-   - Create new project: "francoflex-pronunciation-ai"
-   - Enable Google Analytics (optional)
-
-2. **Enable Authentication Methods**
-   - Enable Email/Password authentication
-   - Enable Google OAuth provider
-   - (Optional) Enable other providers: Apple, Facebook, Twitter
-
-3. **Install Dependencies**
-   ```bash
-   # Root package.json (for API functions)
-   npm install firebase-admin
-
-   # web-client/package.json (for frontend)
-   cd web-client
-   npm install firebase
-   ```
-
-4. **Add Firebase Configuration**
-   - Download service account key from Firebase Console
-   - Add to Netlify environment variables:
-     - `FIREBASE_PROJECT_ID`
-     - `FIREBASE_CLIENT_EMAIL`
-     - `FIREBASE_PRIVATE_KEY`
-   - Add web config to `web-client/.env.local`:
-     - `NEXT_PUBLIC_FIREBASE_API_KEY`
-     - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-     - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-
-#### Phase 2: Backend Changes (3-4 hours)
-
-1. **Create Firebase Admin Helper**
-   - File: `api/_utils/firebase-admin.js`
-   ```javascript
-   import admin from 'firebase-admin';
-
-   let firebaseApp = null;
-
-   export function getFirebaseAdmin() {
-     if (!firebaseApp) {
-       firebaseApp = admin.initializeApp({
-         credential: admin.credential.cert({
-           projectId: process.env.FIREBASE_PROJECT_ID,
-           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-           privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-         })
-       });
-     }
-     return firebaseApp;
-   }
-
-   export async function verifyIdToken(idToken) {
-     const admin = getFirebaseAdmin();
-     return await admin.auth().verifyIdToken(idToken);
-   }
-   ```
-
-2. **Create Auth Middleware**
-   - File: `api/_utils/auth-middleware.js`
-   ```javascript
-   import { verifyIdToken } from './firebase-admin.js';
-
-   export async function requireAuth(event) {
-     const authHeader = event.headers.authorization || event.headers.Authorization;
-     if (!authHeader?.startsWith('Bearer ')) {
-       throw new Error('No authentication token provided');
-     }
-
-     const token = authHeader.split('Bearer ')[1];
-     const decodedToken = await verifyIdToken(token);
-     return decodedToken.uid; // Returns Firebase UID
-   }
-   ```
-
-3. **Update API Functions to Use Firebase Auth**
-   - Add auth check to protected endpoints
-   - Example for `get-session.js`:
-   ```javascript
-   import { requireAuth } from './_utils/auth-middleware.js';
-
-   export async function handler(event, context) {
-     try {
-       const userId = await requireAuth(event);
-       // ... rest of function
-     } catch (authError) {
-       return {
-         statusCode: 401,
-         body: JSON.stringify({ error: 'Unauthorized' })
-       };
-     }
-   }
-   ```
-
-4. **Update Supabase RLS Policies**
-   - Modify policies to use Firebase UID from request
-   - Option A: Store Firebase UID in user column
-   - Option B: Create mapping table between Firebase UID and Supabase user ID
-
-#### Phase 3: Frontend Changes (4-5 hours)
-
-1. **Create Firebase Config**
-   - File: `web-client/src/lib/firebase.ts`
-   ```typescript
-   import { initializeApp } from 'firebase/app';
-   import { getAuth } from 'firebase/auth';
-
-   const firebaseConfig = {
-     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-   };
-
-   export const app = initializeApp(firebaseConfig);
-   export const auth = getAuth(app);
-   ```
-
-2. **Update AuthContext**
-   - File: `web-client/src/contexts/AuthContext.tsx`
-   - Replace Supabase auth with Firebase auth
-   - Use `onAuthStateChanged` for session management
-   - Store and refresh Firebase ID tokens
-
-3. **Update API Client**
-   - File: `web-client/src/lib/api.ts`
-   - Add Firebase ID token to all API requests:
-   ```typescript
-   async request(endpoint: string, options: RequestInit = {}) {
-     const user = auth.currentUser;
-     const token = user ? await user.getIdToken() : null;
-
-     return fetch(`${this.baseUrl}${endpoint}`, {
-       ...options,
-       headers: {
-         'Authorization': token ? `Bearer ${token}` : '',
-         ...options.headers,
-       },
-     });
-   }
-   ```
-
-4. **Update Auth Pages**
-   - Sign in: Use `signInWithEmailAndPassword(auth, email, password)`
-   - Sign up: Use `createUserWithEmailAndPassword(auth, email, password)`
-   - Sign out: Use `signOut(auth)`
-   - Password reset: Use `sendPasswordResetEmail(auth, email)`
-   - OAuth: Use `signInWithPopup(auth, new GoogleAuthProvider())`
-
-#### Phase 4: Data Migration (2-3 hours)
-
-1. **Export Existing Users**
-   - Query Supabase for all users
-   - Export to CSV/JSON
-
-2. **Migration Strategy Decision**
-   - Option A: Automatic migration
-     - Create Firebase users programmatically
-     - Send password reset emails
-   - Option B: Manual re-registration
-     - Users re-register with Firebase
-     - Simpler but requires user action
-
-3. **Update User References**
-   - If Firebase UIDs differ from Supabase UIDs:
-     - Create UID mapping table
-     - OR update all foreign keys to Firebase UID
-
-#### Phase 5: Testing (2-3 hours)
-
-1. **Auth Flow Testing**
-   - Sign up with email/password
-   - Sign in with email/password
-   - Sign in with Google OAuth
-   - Password reset flow
-   - Sign out
-
-2. **API Integration Testing**
-   - Test authenticated endpoints
-   - Test token refresh
-   - Test unauthorized access (should return 401)
-
-3. **Database Access Testing**
-   - Verify RLS policies work with Firebase tokens
-   - Test that users can only access their own data
-
-4. **Cross-Browser Testing**
-   - Chrome, Safari, Firefox
-   - Mobile browsers
-
-**Estimated Effort**: 12-17 hours total
-**Risk Level**: Medium (user migration complexity)
-
-**Rollback Plan**:
-- Keep Supabase auth enabled during migration
-- Use feature flag to switch between auth providers
-- Can revert to Supabase auth if issues arise
+**Token-based SSO**:
+- The frontend watches for a `token` query parameter and calls `signInWithCustomToken`.
+- After successful login the parameter is removed from the URL to avoid re-use.
+- Invalid tokens are logged and the user is shown the standard login screen.
+- Generate tokens via Firebase Admin on the partner app (e.g. `/madameai`) and redirect to the desired Francoflex route with `?token=<customToken>`.
 
 ---
 

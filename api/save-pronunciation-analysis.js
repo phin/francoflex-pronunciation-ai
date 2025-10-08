@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,8 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -27,7 +27,8 @@ export async function handler(event, context) {
   }
 
   try {
-    const userId = requireUserId(payload);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(payload, uid);
     const {
       level,
       analysis_content: analysisContent,
@@ -38,25 +39,20 @@ export async function handler(event, context) {
       return errorResponse(400, 'level and analysis_content are required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
+    const docRef = firestore.collection('pronunciation_analysis').doc();
+    const record = {
+      id: docRef.id,
+      user: userId,
+      type: analysisType,
+      level,
+      content: analysisContent,
+      created_at: new Date().toISOString()
+    };
 
-    const { data, error } = await supabase
-      .from('pronunciation_analysis')
-      .insert({
-        user: userId,
-        type: analysisType,
-        level: level,
-        content: analysisContent,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    await docRef.set(record);
 
-    if (error) {
-      throw error;
-    }
-
-    return successResponse(data, headers);
+    return successResponse(record, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to save pronunciation analysis');
   }

@@ -4,28 +4,17 @@ import {
   AudioWaveform,
   BadgeCheck,
   Bell,
-  BookOpen,
-  Bot,
   ChevronRight,
   ChevronsUpDown,
   Command,
   CreditCard,
-  Folder,
-  Forward,
-  Frame,
   GalleryVerticalEnd,
-  LayoutDashboard, // Add this for Dashboard
+  LayoutDashboard,
   LogOut,
-  Map,
-  MessageCircle,  // Add this for Chat
-  MoreHorizontal,
-  PieChart,
-  Plus,
+  MessageCircle,
   Settings2,
   Sparkles,
-  SquareTerminal,
-  Trash2,
-  TrendingUp,     // Add this for Progress
+  TrendingUp,
 } from "lucide-react"
 
 import * as React from "react"
@@ -45,7 +34,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -53,12 +41,9 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -185,7 +170,7 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(data.teams[0])
+  const activeTeam = data.teams[0]
   const { user, signOut } = useAuth()
   const router = useRouter()
 

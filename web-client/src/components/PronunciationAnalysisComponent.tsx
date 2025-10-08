@@ -18,7 +18,7 @@ interface PronunciationAnalysisProps {
       };
     }>;
     metadata?: {
-      raw_api_response?: any;
+      raw_api_response?: unknown;
     };
   };
 }

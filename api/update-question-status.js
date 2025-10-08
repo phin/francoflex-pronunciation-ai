@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,8 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { ensureSessionOwnership, requireUserId } from './_utils/auth.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -34,19 +34,19 @@ export async function handler(event, context) {
       user_id
     } = payload;
 
-    const userId = requireUserId({ user_id });
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId({ user_id }, uid);
 
     if (questionIndex === undefined) {
       return errorResponse(400, 'question_index is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
     const session = await ensureSessionOwnership({
-      supabase,
+      firestore,
       sessionId,
-      userId,
-      columns: 'id,user,content'
+      userId
     });
 
     const content = session.content || [];
@@ -60,21 +60,19 @@ export async function handler(event, context) {
       status: status
     };
 
-    const { data: updatedSession, error: updateError } = await supabase
-      .from('sessions')
-      .update({
-        content: content,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id)
-      .select()
-      .single();
+    const sessionRef = firestore.collection('sessions').doc(session.id);
+    const updated_at = new Date().toISOString();
 
-    if (updateError) {
-      throw updateError;
-    }
+    await sessionRef.update({
+      content,
+      updated_at
+    });
 
-    return successResponse(updatedSession, headers);
+    return successResponse({
+      ...session,
+      content,
+      updated_at
+    }, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to update question status');
   }

@@ -3,7 +3,16 @@
  * Connects to Netlify serverless functions
  */
 
+import { auth } from "@/lib/firebase";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/.netlify/functions';
+
+type SessionQuestionPayload = {
+  learning: string
+  native: string
+  audio_url?: string | null
+  status?: string
+}
 
 class ApiClient {
   private baseUrl: string;
@@ -12,14 +21,33 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  private async authorizedFetch(url: string, options: RequestInit = {}) {
+    const headers = new Headers(options.headers || {});
+    const currentUser = auth.currentUser;
+
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    return fetch(url, {
+      ...options,
+      headers,
+    });
+  }
+
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const headers = new Headers(options.headers || {});
+
+    if (!isFormData && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const response = await this.authorizedFetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -105,7 +133,7 @@ class ApiClient {
   async savePronunciationAnalysis(data: {
     user_id: string;
     level: string;
-    analysis_content: any;
+    analysis_content: unknown;
     analysis_type?: string;
   }) {
     return this.request('/save-pronunciation-analysis', {
@@ -130,7 +158,7 @@ class ApiClient {
     formData.append('user_id', userId);
     if (sessionId) formData.append('session_id', sessionId);
 
-    const response = await fetch(`${this.baseUrl}/upload-audio`, {
+    const response = await this.authorizedFetch(`${this.baseUrl}/upload-audio`, {
       method: 'POST',
       body: formData,
     });
@@ -144,7 +172,7 @@ class ApiClient {
   }
 
   async textToAudio(text: string, voiceType: string = 'professional_female') {
-    const response = await fetch(`${this.baseUrl}/text-to-audio`, {
+    const response = await this.authorizedFetch(`${this.baseUrl}/text-to-audio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice_type: voiceType }),
@@ -173,7 +201,7 @@ class ApiClient {
   async generateGreeting(data: {
     user_name: string;
     learning_language: string;
-    session_content: any[];
+    session_content: SessionQuestionPayload[];
     level: string;
   }) {
     return this.request('/generate-greeting', {

@@ -25,7 +25,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/contexts/AuthContext"
-import { supabase } from "@/lib/supabase"
 import { api } from "@/lib/api"
 
 const industries = [
@@ -39,29 +38,25 @@ const industries = [
   "Hospitality"
 ]
 
-const learningLanguages = [
-  { code: "en-us", name: "English (US)", flag: "🇺🇸" },
-  { code: "fr-fr", name: "French (France)", flag: "🇫🇷" },
-  { code: "es-es", name: "Spanish (Spain)", flag: "🇪🇸" }
+const languageOptions = [
+  { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "fr", name: "French", flag: "🇫🇷" },
+  { code: "es", name: "Spanish", flag: "🇪🇸" },
+  { code: "ar", name: "Arabic", flag: "🇸🇦" },
+  { code: "zh", name: "Chinese", flag: "🇨🇳" },
+  { code: "de", name: "German", flag: "🇩🇪" },
+  { code: "it", name: "Italian", flag: "🇮🇹" },
+  { code: "pt", name: "Portuguese", flag: "🇵🇹" },
+  { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
+  { code: "hi", name: "Hindi", flag: "🇮🇳" },
+  { code: "pl", name: "Polish", flag: "🇵🇱" },
+  { code: "tr", name: "Turkish", flag: "🇹🇷" }
 ]
 
-const nativeLanguages = [
-  { code: "en-us", name: "English (US)", flag: "🇺🇸" },
-  { code: "fr-fr", name: "French (France)", flag: "🇫🇷" },
-  { code: "es-es", name: "Spanish (Spain)", flag: "🇪🇸" },
-  { code: "de-de", name: "German (Germany)", flag: "🇩🇪" },
-  { code: "it-it", name: "Italian (Italy)", flag: "🇮🇹" },
-  { code: "pt-pt", name: "Portuguese (Portugal)", flag: "🇵🇹" },
-  { code: "nl-nl", name: "Dutch (Netherlands)", flag: "🇳🇱" },
-  { code: "pl-pl", name: "Polish (Poland)", flag: "🇵🇱" },
-  { code: "ru-ru", name: "Russian (Russia)", flag: "🇷🇺" },
-  { code: "ja-jp", name: "Japanese (Japan)", flag: "🇯🇵" },
-  { code: "ko-kr", name: "Korean (South Korea)", flag: "🇰🇷" },
-  { code: "zh-cn", name: "Chinese (China)", flag: "🇨🇳" },
-  { code: "ar-sa", name: "Arabic (Saudi Arabia)", flag: "🇸🇦" },
-  { code: "hi-in", name: "Hindi (India)", flag: "🇮🇳" },
-  { code: "tr-tr", name: "Turkish (Turkey)", flag: "🇹🇷" }
-]
+const getLanguageName = (code: string | null | undefined) => {
+  if (!code) return "Not set"
+  return languageOptions.find((lang) => lang.code === code)?.name ?? code
+}
 
 export default function PreferencesPage() {
   const router = useRouter()
@@ -84,9 +79,9 @@ export default function PreferencesPage() {
       }
 
       try {
-        console.log('Loading user data from FastAPI for user ID:', user.id)
+        console.log('Loading user data from FastAPI for user ID:', user.uid)
         
-        const result = await api.getPreferences(user.id)
+        const result = await api.getPreferences(user.uid)
         const data = result.data
 
         if (data) {
@@ -97,10 +92,10 @@ export default function PreferencesPage() {
           setLearningLanguage(data.learning || "")
           setNativeLanguage(data.native || "")
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error loading user data:', error)
-        // Don't show error toast for "not found" - user might not have preferences yet
-        if (error.message && !error.message.includes('No preferences found')) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('No preferences found')) {
           toast.error("Failed to load preferences")
         }
       } finally {
@@ -137,7 +132,7 @@ export default function PreferencesPage() {
         industry: industry,
         job: jobTitle,
         name: name,
-        user_id: user.id
+        user_id: user.uid
       }
 
       console.log('Saving preferences via API:', preferencesData)
@@ -149,14 +144,10 @@ export default function PreferencesPage() {
       toast.success("Preferences saved successfully!")
       setShowSuccessDialog(true)
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving preferences:', error)
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        error: error
-      })
-      toast.error("Failed to save preferences: " + (error.message || "Unknown error"))
+      const message = error instanceof Error ? error.message : String(error)
+      toast.error("Failed to save preferences: " + (message || "Unknown error"))
     } finally {
       setLoading(false)
     }
@@ -235,7 +226,7 @@ export default function PreferencesPage() {
                     <SelectValue placeholder="Select learning language" />
                   </SelectTrigger>
                   <SelectContent>
-                    {learningLanguages.map((lang) => (
+                    {languageOptions.map((lang) => (
                       <SelectItem key={lang.code} value={lang.code}>
                         {lang.flag} {lang.name}
                       </SelectItem>
@@ -251,7 +242,7 @@ export default function PreferencesPage() {
                     <SelectValue placeholder="Select your native language" />
                   </SelectTrigger>
                   <SelectContent>
-                    {nativeLanguages.map((lang) => (
+                    {languageOptions.map((lang) => (
                       <SelectItem key={lang.code} value={lang.code}>
                         {lang.flag} {lang.name}
                       </SelectItem>
@@ -286,7 +277,11 @@ export default function PreferencesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Preferences Saved!</AlertDialogTitle>
             <AlertDialogDescription>
-              Your preferences have been saved successfully. You can now start your learning journey.
+              Your preferences have been saved successfully.
+              <br />
+              Learning language: {getLanguageName(learningLanguage)}
+              <br />
+              Native language: {getLanguageName(nativeLanguage)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

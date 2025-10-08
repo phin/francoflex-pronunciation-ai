@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -8,7 +7,8 @@ import {
   jsonResponse,
   successResponse
 } from './_utils/http.js';
-import { ensureSessionOwnership, requireUserId } from './_utils/auth.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['GET'];
@@ -22,20 +22,20 @@ export async function handler(event, context) {
 
   try {
     const params = event.queryStringParameters || {};
-    const userId = requireUserId(params);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(params, uid);
     const { session_id: sessionId } = params;
 
     if (!sessionId) {
       return errorResponse(400, 'session_id is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
     const session = await ensureSessionOwnership({
-      supabase,
+      firestore,
       sessionId,
-      userId,
-      columns: 'content,user'
+      userId
     });
 
     const content = session.content || [];

@@ -1,39 +1,70 @@
-import { BadRequestError, ForbiddenError, NotFoundError } from './http.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from './http.js';
+import { verifyIdToken } from './firebase-admin.js';
+import { getFirestoreClient } from './firestore.js';
 
-export function requireUserId(source) {
-  const userId = source?.user_id || source?.userId;
-  if (!userId) {
-    throw new BadRequestError('user_id is required');
+export async function requireAuth(event) {
+  const headers = event.headers || {};
+  const authHeader = headers.authorization || headers.Authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new UnauthorizedError('No authentication token provided');
   }
-  return userId;
+
+  const token = authHeader.replace('Bearer ', '').trim();
+
+  try {
+    const decoded = await verifyIdToken(token);
+    return {
+      uid: decoded.uid,
+      token,
+      claims: decoded,
+    };
+  } catch (error) {
+    throw new UnauthorizedError('Invalid authentication token', error?.message);
+  }
 }
 
-export async function ensureSessionOwnership({ supabase, sessionId, userId, columns = '*' }) {
+export function requireUserId(source, fallbackUserId, options = {}) {
+  const { enforceMatch = true } = options;
+  const candidate = source?.user_id || source?.userId || fallbackUserId;
+
+  if (!candidate) {
+    throw new BadRequestError('user_id is required');
+  }
+
+  if (enforceMatch && fallbackUserId && candidate !== fallbackUserId) {
+    throw new ForbiddenError('Authenticated user does not match requested user_id');
+  }
+
+  return candidate;
+}
+
+export async function ensureSessionOwnership({ firestore, sessionId, userId }) {
   if (!sessionId) {
     throw new BadRequestError('session_id is required');
   }
 
-  const { data: session, error } = await supabase
-    .from('sessions')
-    .select(columns)
-    .eq('id', sessionId)
-    .single();
+  const db = firestore || getFirestoreClient();
+  const sessionRef = db.collection('sessions').doc(sessionId);
+  const snapshot = await sessionRef.get();
 
-  if (error) {
-    if (error.code === 'PGRST116') {
-      throw new NotFoundError('Session not found');
-    }
-
-    throw error;
-  }
-
-  if (!session) {
+  if (!snapshot.exists) {
     throw new NotFoundError('Session not found');
   }
 
-  if (session.user && userId && session.user !== userId) {
+  const session = snapshot.data();
+
+  if (session?.user && userId && session.user !== userId) {
     throw new ForbiddenError('You do not have access to this session');
   }
 
-  return session;
+  return {
+    id: snapshot.id,
+    ...session,
+  };
 }

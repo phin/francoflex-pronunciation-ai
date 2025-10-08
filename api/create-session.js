@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,8 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -27,34 +27,33 @@ export async function handler(event, context) {
   }
 
   try {
-    const userId = requireUserId(payload);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(payload, uid);
     const { level, mode = 'repeat' } = payload;
 
     if (!level) {
       return errorResponse(400, 'level is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
     const sessionContent = generateSessionContent(level);
+    const now = new Date().toISOString();
 
-    const { data, error } = await supabase
-      .from('sessions')
-      .insert({
-        user: userId,
-        level: level,
-        mode: mode,
-        content: sessionContent,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    const sessionRef = firestore.collection('sessions').doc();
+    const sessionRecord = {
+      id: sessionRef.id,
+      user: userId,
+      level,
+      type: mode,
+      content: sessionContent,
+      created_at: now,
+      updated_at: now
+    };
 
-    if (error) {
-      throw error;
-    }
+    await sessionRef.set(sessionRecord);
 
-    return successResponse(data, headers);
+    return successResponse([sessionRecord], headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to create session');
   }

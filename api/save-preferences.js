@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,9 @@ import {
   handleError,
   jsonResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getRealtimeDatabase } from './_utils/firestore.js';
+import { normalizeLanguageCode, languageLabelFromCode } from './_utils/language.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -35,34 +36,53 @@ export async function handler(event, context) {
       name
     } = payload;
 
-    const userId = requireUserId(payload);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(payload, uid);
 
-    const supabase = getSupabaseClient();
+    const realtimeDb = getRealtimeDatabase();
 
-    const { data, error } = await supabase
-      .from('preferences')
-      .upsert({
-        user: userId,  // Column name is "user" not "user_id"
-        learning: learning,
-        native: native,
-        industry,
-        job,
-        name,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user'
-      })
-      .select()
-      .single();
+    const normalizedLearning = normalizeLanguageCode(learning);
+    const normalizedNative = normalizeLanguageCode(native);
 
-    if (error) {
-      throw error;
-    }
+    const learningLabel = languageLabelFromCode(normalizedLearning) ?? null;
+    const nativeLabel = languageLabelFromCode(normalizedNative) ?? null;
+
+    const userRef = realtimeDb.ref(`/users/${userId}`);
+    const prefsRef = userRef.child('preferences');
+
+    await userRef.update({
+      name: name ?? null,
+      language: nativeLabel,
+      targetLanguage: learningLabel
+    });
+
+    await prefsRef.update({
+      language: nativeLabel,
+      targetLanguage: learningLabel,
+      industry: industry ?? null,
+      job: job ?? null,
+      updatedAt: new Date().toISOString()
+    });
+
+    const realtime = (await userRef.get()).val() || {};
+    const prefs = realtime.preferences || {};
+    const saved = {
+      name: realtime.name ?? null,
+      industry: prefs.industry ?? null,
+      job: prefs.job ?? null,
+      learning: normalizedLearning,
+      learningLabel,
+      native: normalizedNative,
+      nativeLabel,
+      level: prefs.level ?? realtime.level ?? null,
+      age: realtime.age ?? prefs.age ?? null,
+      learningGoals: prefs.learningGoals ?? realtime.learningGoals ?? null
+    };
 
     return jsonResponse(200, {
       success: true,
       message: 'Preferences saved successfully',
-      data
+      data: saved
     }, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to save preferences');

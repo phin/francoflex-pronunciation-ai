@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -6,7 +5,9 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient, getRealtimeDatabase } from './_utils/firestore.js';
+import { normalizeLanguageCode, languageLabelFromCode } from './_utils/language.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['GET'];
@@ -20,21 +21,35 @@ export async function handler(event, context) {
 
   try {
     const params = event.queryStringParameters || {};
-    const userId = requireUserId(params);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(params, uid);
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
+    const realtimeDb = getRealtimeDatabase();
 
-    const { data, error } = await supabase
-      .from('preferences')
-      .select('*')
-      .eq('user', userId)  // Column name is "user" not "user_id"
-      .single();
+    const profileSnap = await firestore.collection('users').doc(userId).get();
+    const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
 
-    if (error && error.code !== 'PGRST116') { // Not found error
-      throw error;
-    }
+    const realtimeSnap = await realtimeDb.ref(`/users/${userId}`).get();
+    const realtime = realtimeSnap.exists() ? realtimeSnap.val() || {} : {};
 
-    return successResponse(data || null, headers);
+    const learningCode = normalizeLanguageCode(profile.targetLanguage ?? profile.learning ?? null);
+    const nativeCode = normalizeLanguageCode(profile.userLanguage ?? realtime.language ?? null);
+
+    const preferences = {
+      name: profile.name ?? realtime.name ?? null,
+      industry: profile.industry ?? null,
+      job: profile.job ?? null,
+      learning: learningCode,
+      learningLabel: languageLabelFromCode(learningCode),
+      native: nativeCode,
+      nativeLabel: languageLabelFromCode(nativeCode),
+      level: profile.level ?? realtime.level ?? null,
+      age: realtime.age ?? null,
+      learningGoals: realtime.learningGoals ?? null
+    };
+
+    return successResponse(preferences, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to get preferences');
   }

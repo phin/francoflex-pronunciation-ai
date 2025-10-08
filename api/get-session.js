@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,8 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 /**
  * Get or create session for a user
@@ -25,23 +25,18 @@ export async function handler(event, context) {
 
   try {
     const params = event.queryStringParameters || {};
-    const userId = requireUserId(params);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(params, uid);
 
-    const supabase = getSupabaseClient();
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('user', userId)
-      .order('created_at', { ascending: false })
+    const firestore = getFirestoreClient();
+    const snapshot = await firestore
+      .collection('sessions')
+      .where('user', '==', userId)
+      .orderBy('created_at', 'desc')
       .limit(1)
-      .maybeSingle();
+      .get();
 
-    if (error) {
-      throw error;
-    }
-
-    if (!data) {
+    if (snapshot.empty) {
       const sessionContent = [
         {
           learning: "Bonjour, comment allez-vous?",
@@ -60,26 +55,33 @@ export async function handler(event, context) {
         }
       ];
 
-      const { data: newSession, error: createError } = await supabase
-        .from('sessions')
-        .insert({
-          user: userId,
-          level: 'beginner',
-          type: 'repeat',
-          content: sessionContent,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+      const sessionRef = firestore.collection('sessions').doc();
+      const now = new Date().toISOString();
+      const newSession = {
+        id: sessionRef.id,
+        user: userId,
+        level: 'beginner',
+        type: 'repeat',
+        content: sessionContent,
+        created_at: now,
+        updated_at: now
+      };
 
-      if (createError) {
-        throw createError;
-      }
+      await sessionRef.set(newSession);
 
       return successResponse(newSession, headers);
     }
 
-    return successResponse(data, headers);
+    const doc = snapshot.docs[0];
+    const raw = doc.data();
+    const formatted = {
+      id: doc.id,
+      ...raw,
+      mode: raw.type || raw.mode || 'repeat',
+      type: raw.type || raw.mode || 'repeat'
+    };
+
+    return successResponse(formatted, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to get session');
   }

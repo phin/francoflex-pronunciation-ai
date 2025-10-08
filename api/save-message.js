@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import {
   createCorsHeaders,
   ensureAllowedMethod,
@@ -7,7 +6,8 @@ import {
   handleError,
   successResponse
 } from './_utils/http.js';
-import { ensureSessionOwnership, requireUserId } from './_utils/auth.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -36,7 +36,8 @@ export async function handler(event, context) {
       user_id
     } = payload;
 
-    const userId = requireUserId({ user_id });
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId({ user_id }, uid);
 
     let messageContent = content || aiFeedback || '';
 
@@ -56,37 +57,32 @@ export async function handler(event, context) {
       return errorResponse(400, 'author must be "user" or "system"', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
     await ensureSessionOwnership({
-      supabase,
+      firestore,
       sessionId,
-      userId,
-      columns: 'id,user'
+      userId
     });
 
+    const messageRef = firestore.collection('messages').doc();
+    const now = new Date().toISOString();
     const messageData = {
-      author: author,
+      id: messageRef.id,
+      user: userId,
+      author,
       session: sessionId,
       content: messageContent,
-      created_at: new Date().toISOString()
+      created_at: now
     };
 
     if (audioUrl) {
       messageData.metadata = { audio_url: audioUrl };
     }
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert(messageData)
-      .select()
-      .single();
+    await messageRef.set(messageData);
 
-    if (error) {
-      throw error;
-    }
-
-    return successResponse(data, headers);
+    return successResponse(messageData, headers);
   } catch (error) {
     return handleError(error, headers, 'Failed to save message');
   }

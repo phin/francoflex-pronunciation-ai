@@ -22,18 +22,10 @@ import {
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Mic, Send, Volume2, Square, RotateCcw, CheckCircle, AlertCircle, Play, Pause, BarChart3, ChevronDown } from "lucide-react"
+import { Mic, Send, Volume2, Square, RotateCcw, AlertCircle, Play, Pause, BarChart3 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +36,84 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import Image from "next/image"
+
+declare global {
+  interface Window {
+    currentMediaRecorder?: MediaRecorder
+  }
+}
+
+interface SessionQuestion {
+  learning: string
+  native: string
+  audio_url?: string | null
+  status?: string
+}
+
+interface SessionRecord {
+  id: string
+  user: string
+  level: string
+  mode: string
+  type: string
+  content: SessionQuestion[]
+  created_at?: string
+  updated_at?: string
+}
+
+interface StoredMessage {
+  id: string
+  author: "system" | "user"
+  content: string
+  session: string
+  metadata?: {
+    audio_url?: string
+  } | null
+  created_at: string
+}
+
+interface AnalysisWord {
+  word: string
+  score?: number
+  status?: string
+  feedback?: string
+}
+
+interface PronunciationAnalysis {
+  analysis: {
+    overall_score?: number
+    word_analysis?: AnalysisWord[]
+  }
+  summary?: string
+  encouragement?: string
+  ai_feedback?: string
+}
+
+interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string | null
+}
+
+interface UserPreferences {
+  name?: string | null
+  industry?: string | null
+  job?: string | null
+  learning?: string | null
+  learningLabel?: string | null
+  native?: string | null
+  nativeLabel?: string | null
+  level?: string | null
+  age?: string | null
+  learningGoals?: string | null
+}
+
+interface NextQuestionPayload {
+  index: number
+  question: SessionQuestion
+  total_questions: number
+  completed_questions: number
+}
 
 interface Message {
   id: string
@@ -65,20 +135,19 @@ export default function VoiceChatActivityPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isPlayingRecording, setIsPlayingRecording] = useState(false)
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
-  const [openQuestions, setOpenQuestions] = useState<Record<string, boolean>>({})
-  const [selectedWord, setSelectedWord] = useState<{word: string, score: number, analysis: string} | null>(null)
+  const [selectedWord, setSelectedWord] = useState<{ word: string; score: number; analysis: string } | null>(null)
   
   // Translation drawer state
   const [translationDrawerOpen, setTranslationDrawerOpen] = useState(false)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   
   // Session data
-  const [sessionData, setSessionData] = useState<any>(null)
+  const [sessionData, setSessionData] = useState<SessionRecord | null>(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   
   // Analysis data
-  const [analysisData, setAnalysisData] = useState<any>(null)
+  const [analysisData, setAnalysisData] = useState<PronunciationAnalysis | null>(null)
   const [analysisReady, setAnalysisReady] = useState(false)
 
   // Load session data and messages when component mounts
@@ -91,24 +160,33 @@ export default function VoiceChatActivityPage() {
 
       try {
         const sessionId = searchParams.get('sessionId')
-        console.log('Loading session data for user:', user.id, 'sessionId:', sessionId)
+        console.log('Loading session data for user:', user.uid, 'sessionId:', sessionId)
         
         if (sessionId) {
           // Load specific session by ID
-          const sessionResult = await api.getSpecificSession(user.id, sessionId)
+          const sessionResult = await api.getSpecificSession(user.uid, sessionId) as ApiResponse<SessionRecord | SessionRecord[] | null>
           console.log('Session data loaded:', sessionResult)
           
           if (sessionResult.success && sessionResult.data) {
-            setSessionData(sessionResult.data)
+            const sessionRecord = Array.isArray(sessionResult.data)
+              ? sessionResult.data[0] ?? null
+              : sessionResult.data
+
+            if (!sessionRecord) {
+              setLoading(false)
+              return
+            }
+
+            setSessionData(sessionRecord)
             
             // Load existing messages from database
             try {
-              const messagesResult = await api.getMessagesFromSession(sessionId)
+              const messagesResult = await api.getMessagesFromSession(sessionId) as ApiResponse<StoredMessage[]>
               console.log('Messages loaded:', messagesResult)
               
-              if (messagesResult.success && messagesResult.data.length > 0) {
+              if (messagesResult.success && Array.isArray(messagesResult.data) && messagesResult.data.length > 0) {
                 // Convert database messages to UI format
-                const dbMessages = messagesResult.data.map((msg: any) => ({
+                const dbMessages: Message[] = messagesResult.data.map((msg: StoredMessage) => ({
                   id: msg.id,
                   type: msg.author === 'system' ? 'ai' : 'user',
                   content: msg.content,
@@ -119,12 +197,12 @@ export default function VoiceChatActivityPage() {
                 
                 // Get the current question index based on completed questions
                 try {
-                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.id)
+                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.uid) as ApiResponse<NextQuestionPayload | null>
                   if (nextQuestionResult.success && nextQuestionResult.data) {
                     setCurrentQuestionIndex(nextQuestionResult.data.index)
                   } else {
                     // All questions completed, set to last question
-                    setCurrentQuestionIndex(sessionResult.data.content.length - 1)
+                    setCurrentQuestionIndex(sessionRecord.content.length - 1)
                   }
                 } catch (error) {
                   console.error('Error getting current question index:', error)
@@ -133,7 +211,7 @@ export default function VoiceChatActivityPage() {
                 
                 // Load latest pronunciation analysis
                 try {
-                  const latestAnalysisResult = await api.getLatestPronunciationAnalysis(user.id)
+                  const latestAnalysisResult = await api.getLatestPronunciationAnalysis(user.uid) as ApiResponse<{ content: PronunciationAnalysis }>
                   if (latestAnalysisResult.success && latestAnalysisResult.data) {
                     setAnalysisData(latestAnalysisResult.data.content)
                     setAnalysisReady(true)
@@ -146,15 +224,16 @@ export default function VoiceChatActivityPage() {
                 // No messages exist, generate and save greeting message first
                 try {
                   // Get user preferences for language info
-                  const userPrefs = await api.getPreferences(user.id)
-                  const learningLanguage = userPrefs.data?.[0]?.learning || 'fr'
-                  
+                  const prefsResponse = await api.getPreferences(user.uid) as ApiResponse<UserPreferences | null>
+                  const prefs = prefsResponse.data
+                  const learningLanguage = prefs?.learning || 'fr'
+
                   // Generate personalized greeting
                   const greetingResult = await api.generateGreeting({
-                    user_name: userPrefs.data?.[0]?.name || 'Student',
+                    user_name: prefs?.name || 'Student',
                     learning_language: learningLanguage,
-                    session_content: sessionResult.data.content || [],
-                    level: sessionResult.data.level || 'B1'
+                    session_content: sessionRecord.content || [],
+                    level: sessionRecord.level || 'B1'
                   })
                   
                   const messages = []
@@ -166,7 +245,7 @@ export default function VoiceChatActivityPage() {
                       session_id: sessionId,
                       content: greetingResult.data.greeting,
                       audio_url: undefined,
-                      user_id: user.id,
+                      user_id: user.uid,
                     }
                     
                     const greetingSaveResult = await api.saveMessage(greetingMessage)
@@ -182,14 +261,14 @@ export default function VoiceChatActivityPage() {
                   }
                   
                   // Then save the first question as a system message
-                  const firstQuestion = sessionResult.data.content?.[0]
+                  const firstQuestion = sessionRecord.content?.[0]
                   if (firstQuestion) {
                     const systemMessage = {
                       author: 'system',
                       session_id: sessionId,
                       content: firstQuestion.learning,
                       audio_url: firstQuestion.audio_url,
-                      user_id: user.id,
+                      user_id: user.uid,
                     }
                     
                     const messageSaveResult = await api.saveMessage(systemMessage)
@@ -210,7 +289,7 @@ export default function VoiceChatActivityPage() {
                 } catch (error) {
                   console.error('Error initializing session messages:', error)
                   // Fallback: just show the first question
-                  const firstQuestion = sessionResult.data.content?.[0]
+                  const firstQuestion = sessionRecord.content?.[0]
                   if (firstQuestion) {
                     const firstMsg: Message = {
                       id: 'temp-' + Date.now(),
@@ -242,7 +321,7 @@ export default function VoiceChatActivityPage() {
           }
         } else {
           // Get most recent session (auto-creates if none exists)
-          const result = await api.getSession(user.id)
+          const result = await api.getSession(user.uid)
           console.log('Session data loaded:', result)
 
           if (result.success && result.data) {
@@ -273,82 +352,6 @@ export default function VoiceChatActivityPage() {
     loadSessionData()
   }, [user, searchParams])
   
-  // Pronunciation analysis data for each question
-  const pronunciationAnalysis = [
-    {
-      id: "1",
-      question: "Bonjour, je suis nouveau dans l'apprentissage du français. Je travaille dans le secteur pharmaceutique.",
-      score: 78,
-      wordScores: [
-        { word: "Bonjour", score: 85, analysis: "Good pronunciation. The 'j' sound is clear and the nasal 'on' is well articulated." },
-        { word: "je", score: 90, analysis: "Excellent. The 'j' sound is perfect and the vowel is clear." },
-        { word: "suis", score: 80, analysis: "Good pronunciation. The 's' sound could be slightly softer." },
-        { word: "nouveau", score: 75, analysis: "The 'eau' ending needs work. Try to make the 'o' sound more rounded." },
-        { word: "dans", score: 88, analysis: "Very good. The nasal 'an' is well pronounced." },
-        { word: "l'apprentissage", score: 70, analysis: "Complex word. Break it down: 'ap-pren-ti-ssage'. The double 's' needs emphasis." },
-        { word: "du", score: 92, analysis: "Perfect pronunciation. The liaison is natural." },
-        { word: "français", score: 78, analysis: "Good overall. The 'ç' sound is correct but could be softer." },
-        { word: "Je", score: 85, analysis: "Consistent with previous pronunciation. Well done." },
-        { word: "travaille", score: 72, analysis: "The 'ai' sound needs work. It should be more like 'ay'." },
-        { word: "dans", score: 88, analysis: "Consistent pronunciation. Good repetition." },
-        { word: "le", score: 90, analysis: "Perfect. The 'l' sound is clear and natural." },
-        { word: "secteur", score: 76, analysis: "Good attempt. The 'ct' combination could be smoother." },
-        { word: "pharmaceutique", score: 65, analysis: "Challenging word. Practice: 'far-ma-sö-tik'. The 'ph' should be 'f' sound." }
-      ],
-      feedback: "Bon travail ! Votre prononciation est correcte. Essayez de ralentir un peu sur 'pharmaceutique'.",
-      audioUrls: {
-        user: "/talking/talking_01.mp4",
-        native: "/speech-intro.mp3"
-      }
-    },
-    {
-      id: "2", 
-      question: "Je présente les résultats des essais cliniques de notre nouveau médicament.",
-      score: 85,
-      wordScores: [
-        { word: "Je", score: 90, analysis: "Perfect pronunciation. Consistent with previous attempts." },
-        { word: "présente", score: 85, analysis: "Very good. The 'é' sound is clear and the 't' is properly pronounced." },
-        { word: "les", score: 88, analysis: "Excellent. The 'l' sound is natural and the 's' is correctly silent." },
-        { word: "résultats", score: 82, analysis: "Good overall. The 'é' and 'a' sounds are clear." },
-        { word: "des", score: 92, analysis: "Perfect. The liaison with the next word is natural." },
-        { word: "essais", score: 78, analysis: "Good attempt. The 'ai' sound could be more like 'ay'." },
-        { word: "cliniques", score: 75, analysis: "The 'cl' combination needs work. Try 'klee-neek'." },
-        { word: "de", score: 90, analysis: "Perfect pronunciation and liaison." },
-        { word: "notre", score: 85, analysis: "Very good. The 'o' sound is clear." },
-        { word: "nouveau", score: 80, analysis: "Better than before. Keep working on the 'eau' ending." },
-        { word: "médicament", score: 72, analysis: "Complex word. Practice: 'may-dee-ka-mahn'. The 'é' should be 'ay' sound." }
-      ],
-      feedback: "Excellente prononciation ! Votre articulation est très claire.",
-      audioUrls: {
-        user: "/talking/talking_02.mp4",
-        native: "/speech-intro.mp3"
-      }
-    },
-    {
-      id: "3",
-      question: "Les effets secondaires sont minimaux et bien tolérés par les patients.",
-      score: 72,
-      wordScores: [
-        { word: "Les", score: 85 },
-        { word: "effets", score: 78 },
-        { word: "secondaires", score: 72 },
-        { word: "sont", score: 88 },
-        { word: "minimaux", score: 68 },
-        { word: "et", score: 92 },
-        { word: "bien", score: 85 },
-        { word: "tolérés", score: 70 },
-        { word: "par", score: 90 },
-        { word: "les", score: 88 },
-        { word: "patients", score: 75 }
-      ],
-      feedback: "Bon effort ! Concentrez-vous sur l'intonation des mots techniques.",
-      audioUrls: {
-        user: "/talking/talking_03.mp4",
-        native: "/speech-intro.mp3"
-      }
-    }
-  ]
-  
   const [messages, setMessages] = useState<Message[]>([])
 
 
@@ -375,14 +378,14 @@ export default function VoiceChatActivityPage() {
         setIsRecording(true)
         
         // Store mediaRecorder reference for stopping
-        ;(window as any).currentMediaRecorder = mediaRecorder
+        window.currentMediaRecorder = mediaRecorder
       } catch (error) {
         console.error('Error accessing microphone:', error)
         alert('Unable to access microphone. Please check permissions.')
       }
     } else {
       // Stop recording
-      const mediaRecorder = (window as any).currentMediaRecorder
+      const mediaRecorder = window.currentMediaRecorder
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop()
         setIsRecording(false)
@@ -425,7 +428,7 @@ export default function VoiceChatActivityPage() {
         console.log('Uploading audio file:', audioFile.name, audioFile.size, 'bytes')
         
         // Upload audio to backend
-        const uploadResult = await api.uploadAudio(audioFile, user.id, sessionId)
+        const uploadResult = await api.uploadAudio(audioFile, user.uid, sessionId)
         console.log('Audio upload result:', uploadResult)
         
         // Save user message to database
@@ -434,7 +437,7 @@ export default function VoiceChatActivityPage() {
           session_id: sessionId,
           content: "[Message vocal]",
           audio_url: uploadResult.data.audio_url,
-          user_id: user.id,
+          user_id: user.uid,
         }
         
         const saveResult = await api.saveMessage(userMessage)
@@ -474,7 +477,7 @@ export default function VoiceChatActivityPage() {
                 // Save pronunciation analysis to database
                 try {
                   const saveAnalysisResult = await api.savePronunciationAnalysis({
-                    user_id: user.id,
+                    user_id: user.uid,
                     level: sessionData.level || "B1",
                     analysis_content: analysisResult.data,
                     analysis_type: "repeat"
@@ -502,7 +505,7 @@ export default function VoiceChatActivityPage() {
                   session_id: sessionId,
                   content: analysisResult.data.summary,
                   audio_url: undefined,
-                  user_id: user.id,
+                  user_id: user.uid,
                 }
                 
                 const summarySaveResult = await api.saveMessage(summaryMessage)
@@ -518,11 +521,11 @@ export default function VoiceChatActivityPage() {
                 
                 // Update current question status to done
                 try {
-                  await api.updateQuestionStatus(sessionId, currentQuestionIndex, user.id)
+                  await api.updateQuestionStatus(sessionId, currentQuestionIndex, user.uid)
                   console.log(`✅ Updated question ${currentQuestionIndex} status to done`)
                   
                   // Get the next question
-                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.id)
+                  const nextQuestionResult = await api.getNextQuestion(sessionId, user.uid)
                   console.log('Next question result:', nextQuestionResult)
                   
                   if (nextQuestionResult.success && nextQuestionResult.data) {
@@ -535,7 +538,7 @@ export default function VoiceChatActivityPage() {
                       session_id: sessionId,
                       content: nextQuestion.question.learning,
                       audio_url: nextQuestion.question.audio_url,
-                      user_id: user.id,
+                      user_id: user.uid,
                     }
                     
                     const nextQuestionSaveResult = await api.saveMessage(nextQuestionMessage)
@@ -633,10 +636,6 @@ export default function VoiceChatActivityPage() {
     }
   }
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  }
-
   const toggleAudio = (messageId: string, audioUrl: string) => {
     if (playingAudio === messageId) {
       setPlayingAudio(null)
@@ -644,18 +643,6 @@ export default function VoiceChatActivityPage() {
     } else {
       setPlayingAudio(messageId)
       // Play audio logic would go here
-      const audio = new Audio(audioUrl)
-      audio.play()
-      audio.onended = () => setPlayingAudio(null)
-    }
-  }
-
-  const toggleAnalysisAudio = (analysisId: string, audioType: 'user' | 'native', audioUrl: string) => {
-    const audioId = `${analysisId}-${audioType}`
-    if (playingAudio === audioId) {
-      setPlayingAudio(null)
-    } else {
-      setPlayingAudio(audioId)
       const audio = new Audio(audioUrl)
       audio.play()
       audio.onended = () => setPlayingAudio(null)
@@ -742,7 +729,7 @@ export default function VoiceChatActivityPage() {
                   <SheetHeader className="flex-shrink-0">
                     <SheetTitle>Analyse de Prononciation</SheetTitle>
                     <SheetDescription>
-                      Consultez l'analyse détaillée de vos réponses
+                      Consultez l&apos;analyse détaillée de vos réponses
                     </SheetDescription>
                   </SheetHeader>
                   <div className="flex-1 overflow-y-auto mt-8 space-y-6 px-4 pr-2">
@@ -776,7 +763,7 @@ export default function VoiceChatActivityPage() {
                                   <div className="space-y-3">
                                     <h4 className="font-medium">Word Analysis:</h4>
                                     <div className="flex flex-wrap gap-2">
-                                      {analysisData.analysis.word_analysis.map((word: any, index: number) => (
+                                      {analysisData.analysis.word_analysis.map((word: AnalysisWord, index: number) => (
                                         <Button
                                           key={index}
                                           variant="neutral"
@@ -934,7 +921,7 @@ export default function VoiceChatActivityPage() {
                 <div className="bg-secondary-background border-border border-2 rounded-base p-4">
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-main"></div>
-                    <span className="text-sm text-muted-foreground">L'assistant tape...</span>
+                    <span className="text-sm text-muted-foreground">L&apos;assistant tape...</span>
                   </div>
                 </div>
               </div>
@@ -1016,11 +1003,11 @@ export default function VoiceChatActivityPage() {
                   </p>
                 ) : recordedAudio ? (
                   <p className="text-sm text-green-600 font-medium">
-                    ✅ Enregistrement terminé - Écoutez avant d'envoyer
+                    ✅ Enregistrement terminé - Écoutez avant d&apos;envoyer
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Appuyez sur le micro pour commencer l'enregistrement
+                    Appuyez sur le micro pour commencer l&apos;enregistrement
                   </p>
                 )}
               </div>
@@ -1034,7 +1021,7 @@ export default function VoiceChatActivityPage() {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <span className="text-lg font-semibold">"{selectedWord?.word}"</span>
+              <span className="text-lg font-semibold">&ldquo;{selectedWord?.word}&rdquo;</span>
               <Badge 
                 className={`${
                   selectedWord && selectedWord.score >= 80 

@@ -1,4 +1,3 @@
-import { getSupabaseClient } from './_utils/supabase.js';
 import multipart from 'lambda-multipart-parser';
 import {
   createCorsHeaders,
@@ -8,7 +7,8 @@ import {
   handleError,
   jsonResponse
 } from './_utils/http.js';
-import { requireUserId } from './_utils/auth.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getStorageBucket } from './_utils/firestore.js';
 
 export async function handler(event, context) {
   const allowedMethods = ['POST'];
@@ -26,39 +26,36 @@ export async function handler(event, context) {
     const result = await multipart.parse(event);
 
     const file = result.files?.[0];
-    const userId = requireUserId(result);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(result, uid);
     const sessionId = result.session_id;
 
     if (!file) {
       return errorResponse(400, 'No file uploaded', headers);
     }
 
-    const supabase = getSupabaseClient();
-
     const timestamp = Date.now();
     const filename = `${userId}/${sessionId || 'audio'}/${timestamp}-${file.filename}`;
 
-    const { data: uploadData, error: uploadError } = await supabase
-      .storage
-      .from('audio')
-      .upload(filename, file.content, {
-        contentType: file.contentType,
-        upsert: false
-      });
+    const bucket = getStorageBucket();
+    const storageFile = bucket.file(filename);
 
-    if (uploadError) {
-      throw uploadError;
-    }
+    await storageFile.save(file.content, {
+      resumable: false,
+      contentType: file.contentType || 'audio/mpeg',
+      metadata: {
+        firebaseStorageDownloadTokens: filename.replace(/\//g, '-')
+      }
+    });
 
-    const { data: urlData } = supabase
-      .storage
-      .from('audio')
-      .getPublicUrl(filename);
+    await storageFile.makePublic();
+
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURI(filename)}`;
 
     return jsonResponse(200, {
       success: true,
       data: {
-        audio_url: urlData.publicUrl,
+        audio_url: publicUrl,
         filename: filename
       }
     }, headers);

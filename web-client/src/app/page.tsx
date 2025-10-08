@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/AuthContext"
+import { FirebaseError } from "firebase/app"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -42,7 +43,7 @@ export default function AuthPage() {
       }
 
       console.log('Attempting authentication...', { isLogin, email })
-      let error = null
+      let error: FirebaseError | null = null
 
       if (isLogin) {
         const result = await signIn(email, password)
@@ -59,16 +60,20 @@ export default function AuthPage() {
         
         // Provide more specific error messages
         let errorMessage = ""
-        if (error.message?.includes('Invalid login credentials')) {
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-email' || error.message?.includes('Invalid login credentials')) {
           if (isLogin) {
             errorMessage = "Invalid email or password. Please check your credentials and try again."
           } else {
             errorMessage = "An account with this email may already exist. Try logging in instead."
           }
+        } else if (error.code === 'auth/user-not-found') {
+          errorMessage = "No account found with this email. Try signing up instead."
+        } else if (error.code === 'auth/email-already-in-use') {
+          errorMessage = "An account with this email already exists. Try logging in instead."
+        } else if (error.code === 'auth/missing-email') {
+          errorMessage = "Please enter an email address."
         } else if (error.message?.includes('Email not confirmed')) {
           errorMessage = "Please check your email and click the confirmation link before logging in."
-        } else if (error.message?.includes('User already registered')) {
-          errorMessage = "An account with this email already exists. Try logging in instead."
         } else {
           errorMessage = error.message || 'Authentication failed'
         }
@@ -228,5 +233,4 @@ export default function AuthPage() {
     </div>
   )
 }
-
 

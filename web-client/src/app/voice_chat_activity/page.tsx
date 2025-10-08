@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
 import { api } from "@/lib/api"
@@ -125,7 +125,7 @@ interface Message {
   nativeTranslation?: string
 }
 
-export default function VoiceChatActivityPage() {
+function VoiceChatActivityContent() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
   const [progress, setProgress] = useState(25)
@@ -1112,5 +1112,20 @@ export default function VoiceChatActivityPage() {
       {/* Toast notifications */}
       <Toaster position="top-right" />
     </div>
+  )
+}
+
+export default function VoiceChatActivityPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-sm text-gray-600">Loading your learning session...</p>
+        </div>
+      </div>
+    }>
+      <VoiceChatActivityContent />
+    </Suspense>
   )
 }

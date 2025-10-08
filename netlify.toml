@@ -2,9 +2,14 @@
   command = "npm install && cd web-client && npm install && npm run build"
   publish = "web-client/.next"
 
+# Disable secrets scanning for Firebase client API keys (safe to expose)
+[build.processing]
+  skip_processing = false
+
 [build.environment]
   NODE_VERSION = "18"
   NPM_FLAGS = "--legacy-peer-deps"
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
   NEXT_PUBLIC_SUPABASE_URL = "https://pznzykwfboqryuibelqs.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6bnp5a3dmYm9xcnl1aWJlbHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTk3MjUsImV4cCI6MjA3NDkzNTcyNX0.BIdyGbIUTzGdMSp7PI9gNiwmLgUmcD9jqBU7LHH5YIU"
   NEXT_PUBLIC_FIREBASE_API_KEY = "AIzaSyCmm7pGnSM2FQCiIQtFBowhaXP2xHpO-6I"

@@ -16,20 +16,28 @@ export function getFirebaseApp() {
     if (getApps().length) {
       firebaseApp = getApps()[0];
     } else {
-      const projectId = getRequiredEnvVar('FIREBASE_PROJECT_ID');
-      const clientEmail = getRequiredEnvVar('FIREBASE_CLIENT_EMAIL');
-      const privateKey = getRequiredEnvVar('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n');
-      const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+      try {
+        const projectId = getRequiredEnvVar('FIREBASE_PROJECT_ID');
+        const clientEmail = getRequiredEnvVar('FIREBASE_CLIENT_EMAIL');
+        const privateKey = getRequiredEnvVar('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n');
+        const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
-      const config = {
-        credential: cert({ projectId, clientEmail, privateKey }),
-      };
+        console.log('Initializing Firebase Admin SDK with project:', projectId);
 
-      if (databaseURL) {
-        config.databaseURL = databaseURL;
+        const config = {
+          credential: cert({ projectId, clientEmail, privateKey }),
+        };
+
+        if (databaseURL) {
+          config.databaseURL = databaseURL;
+        }
+
+        firebaseApp = initializeApp(config);
+        console.log('Firebase Admin SDK initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize Firebase Admin SDK:', error.message);
+        throw error;
       }
-
-      firebaseApp = initializeApp(config);
     }
   }
 
@@ -41,7 +49,14 @@ export async function verifyIdToken(idToken) {
     throw new Error('No Firebase ID token provided');
   }
 
-  const app = getFirebaseApp();
-  const auth = getAuth(app);
-  return auth.verifyIdToken(idToken);
+  try {
+    const app = getFirebaseApp();
+    const auth = getAuth(app);
+    const decoded = await auth.verifyIdToken(idToken);
+    console.log('Token verified successfully for user:', decoded.uid);
+    return decoded;
+  } catch (error) {
+    console.error('Token verification failed:', error.message);
+    throw error;
+  }
 }

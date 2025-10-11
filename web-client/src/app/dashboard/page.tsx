@@ -33,6 +33,22 @@ import { useAuth } from "@/contexts/AuthContext"
 import { api } from "@/lib/api"
 import { Plus, Play, Clock, Target } from "lucide-react"
 
+interface SessionSummary {
+  id: string
+  user: string
+  level: string
+  type: string
+  mode?: string
+  created_at?: string
+  updated_at?: string
+}
+
+interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string | null
+}
+
   const levels = [
     { value: "A1", label: "A1 - Beginner" },
     { value: "A2", label: "A2 - Elementary" },
@@ -50,7 +66,7 @@ import { Plus, Play, Clock, Target } from "lucide-react"
 export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const [sessions, setSessions] = useState<any[]>([])
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [selectedLevel, setSelectedLevel] = useState("")
   const [selectedMode, setSelectedMode] = useState("repeat")
@@ -68,13 +84,17 @@ export default function DashboardPage() {
       }
 
       try {
-        console.log('Loading sessions for user:', user.id)
-        const result = await api.getAllSessions(user.id)
-        setSessions(result.data || [])
-      } catch (error) {
+        console.log('Loading sessions for user:', user.uid)
+        const result = await api.getAllSessions(user.uid) as ApiResponse<SessionSummary[]>
+        if (result.success && Array.isArray(result.data)) {
+          setSessions(result.data)
+        } else {
+          setSessions([])
+        }
+      } catch (error: unknown) {
         console.error('Error loading sessions:', error)
-        // Don't show error toast for "not found" - user might not have sessions yet
-        if (error.message && !error.message.includes('No sessions found')) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('No sessions found')) {
           toast.error("Failed to load sessions")
         }
       } finally {
@@ -107,7 +127,7 @@ export default function DashboardPage() {
     try {
       console.log('Creating session for level:', selectedLevel)
       
-      const result = await api.createSession(user.id, selectedLevel, selectedMode)
+      const result = await api.createSession(user.uid, selectedLevel, selectedMode) as ApiResponse<SessionSummary[]>
       console.log('Session created:', result)
       
       if (result.success && result.data && result.data.length > 0) {
@@ -115,8 +135,8 @@ export default function DashboardPage() {
         const sessionId = result.data[0].id || result.data[0].session_id
         
         // Reload sessions to show the new one
-        const sessionsResult = await api.getAllSessions(user.id)
-        setSessions(sessionsResult.data || [])
+        const sessionsResult = await api.getAllSessions(user.uid) as ApiResponse<SessionSummary[]>
+        setSessions(Array.isArray(sessionsResult.data) ? sessionsResult.data : [])
         
         toast.success("Activity created successfully!")
         
@@ -130,16 +150,17 @@ export default function DashboardPage() {
         throw new Error("Failed to create session - no data returned")
       }
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error creating activity:', error)
-      toast.error("Failed to create activity: " + (error.message || "Unknown error"))
+      const message = error instanceof Error ? error.message : String(error)
+      toast.error("Failed to create activity: " + (message || "Unknown error"))
     } finally {
       setLoading(false)
       setCreatingLevel("")
     }
   }
 
-  const handleStartActivity = (session: any) => {
+  const handleStartActivity = (session: SessionSummary) => {
     // Navigate to the appropriate page based on session type
     if (session.type === 'conversational') {
       router.push(`/voice_chat_conversational?sessionId=${session.id}`)
@@ -148,7 +169,8 @@ export default function DashboardPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "—"
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', {
       month: 'short',

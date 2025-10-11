@@ -1,129 +1,79 @@
-import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  successResponse
+} from './_utils/http.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    const { session_id, question_index, status = 'done' } = JSON.parse(event.body);
+    const {
+      session_id: sessionId,
+      question_index: questionIndex,
+      status = 'done',
+      user_id
+    } = payload;
 
-    if (!session_id || question_index === undefined) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'session_id and question_index are required' })
-      };
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId({ user_id }, uid);
+
+    if (questionIndex === undefined) {
+      return errorResponse(400, 'question_index is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
-    // Get the current session
-    const { data: session, error: fetchError } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('id', session_id)
-      .single();
+    const session = await ensureSessionOwnership({
+      firestore,
+      sessionId,
+      userId
+    });
 
-    if (fetchError) {
-      console.error('Supabase fetch error:', fetchError);
-      throw fetchError;
-    }
-
-    if (!session) {
-      return {
-        statusCode: 404,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Session not found' })
-      };
-    }
-
-    // Update the content array
     const content = session.content || [];
 
-    if (question_index < 0 || question_index >= content.length) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Invalid question_index' })
-      };
+    if (questionIndex < 0 || questionIndex >= content.length) {
+      return errorResponse(400, 'Invalid question_index', headers);
     }
 
-    // Update the status of the question at the specified index
-    content[question_index] = {
-      ...content[question_index],
+    content[questionIndex] = {
+      ...content[questionIndex],
       status: status
     };
 
-    // Update the session in the database
-    const { data: updatedSession, error: updateError } = await supabase
-      .from('sessions')
-      .update({
-        content: content,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session_id)
-      .select()
-      .single();
+    const sessionRef = firestore.collection('sessions').doc(session.id);
+    const updated_at = new Date().toISOString();
 
-    if (updateError) {
-      console.error('Supabase update error:', updateError);
-      throw updateError;
-    }
+    await sessionRef.update({
+      content,
+      updated_at
+    });
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: updatedSession
-      })
-    };
-
+    return successResponse({
+      ...session,
+      content,
+      updated_at
+    }, headers);
   } catch (error) {
-    console.error('Update question status error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to update question status',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to update question status');
   }
 }

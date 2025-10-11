@@ -10,7 +10,7 @@ from pathlib import Path
 
 def main():
     # Set up environment
-    backend_dir = Path(__file__).parent / "backend"
+    backend_dir = Path(__file__).parent / "_deprecated_backend"
     os.chdir(backend_dir)
     
     # Check if virtual environment exists

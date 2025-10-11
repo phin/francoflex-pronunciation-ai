@@ -1,121 +1,64 @@
-import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  jsonResponse,
+  successResponse
+} from './_utils/http.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['GET'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
-  }
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
 
   try {
-    const { session_id } = event.queryStringParameters || {};
+    const params = event.queryStringParameters || {};
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(params, uid);
+    const { session_id: sessionId } = params;
 
-    if (!session_id) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'session_id is required' })
-      };
+    if (!sessionId) {
+      return errorResponse(400, 'session_id is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
-    // Get the current session
-    const { data: session, error: fetchError } = await supabase
-      .from('sessions')
-      .select('content')
-      .eq('id', session_id)
-      .single();
-
-    if (fetchError) {
-      console.error('Supabase fetch error:', fetchError);
-      throw fetchError;
-    }
-
-    if (!session) {
-      return {
-        statusCode: 404,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Session not found' })
-      };
-    }
+    const session = await ensureSessionOwnership({
+      firestore,
+      sessionId,
+      userId
+    });
 
     const content = session.content || [];
 
-    // Find the first question that is not done
     for (let i = 0; i < content.length; i++) {
       if (content[i].status !== 'done') {
         const completedQuestions = content.filter(q => q.status === 'done').length;
 
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-          body: JSON.stringify({
-            success: true,
-            data: {
-              index: i,
-              question: content[i],
-              total_questions: content.length,
-              completed_questions: completedQuestions
-            }
-          })
-        };
+        return successResponse({
+          index: i,
+          question: content[i],
+          total_questions: content.length,
+          completed_questions: completedQuestions
+        }, headers);
       }
     }
 
-    // All questions are completed
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: null,
-        message: 'All questions completed'
-      })
-    };
-
+    return jsonResponse(200, {
+      success: true,
+      data: null,
+      message: 'All questions completed'
+    }, headers);
   } catch (error) {
-    console.error('Get next question error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to get next question',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to get next question');
   }
 }

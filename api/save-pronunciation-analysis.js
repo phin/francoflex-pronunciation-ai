@@ -1,88 +1,59 @@
-import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  successResponse
+} from './_utils/http.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    const { user_id, level, analysis_content, analysis_type = 'repeat' } = JSON.parse(event.body);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(payload, uid);
+    const {
+      level,
+      analysis_content: analysisContent,
+      analysis_type: analysisType = 'repeat'
+    } = payload;
 
-    if (!user_id || !level || !analysis_content) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'user_id, level, and analysis_content are required' })
-      };
+    if (!level || !analysisContent) {
+      return errorResponse(400, 'level and analysis_content are required', headers);
     }
 
-    const supabase = getSupabaseClient();
-
-    // Insert pronunciation analysis
-    const { data, error } = await supabase
-      .from('pronunciation_analysis')
-      .insert({
-        user: user_id,
-        type: analysis_type,
-        level: level,
-        content: analysis_content,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: data
-      })
+    const firestore = getFirestoreClient();
+    const docRef = firestore.collection('pronunciation_analysis').doc();
+    const record = {
+      id: docRef.id,
+      user: userId,
+      type: analysisType,
+      level,
+      content: analysisContent,
+      created_at: new Date().toISOString()
     };
 
+    await docRef.set(record);
+
+    return successResponse(record, headers);
   } catch (error) {
-    console.error('Save pronunciation analysis error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to save pronunciation analysis',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to save pronunciation analysis');
   }
 }

@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
 import { Public_Sans } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
-import { AppSidebar } from "./sidebar"
-import { DynamicBreadcrumb } from "@/components/dynamic-breadcrumb"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
 import { ConditionalLayout } from "@/components/conditional-layout"
 import { AuthProvider } from "@/contexts/AuthContext"
 
@@ -30,11 +24,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${publicSans.variable} font-sans bg-background`}>
-        <AuthProvider>
-          <ConditionalLayout>
-            {children}
-          </ConditionalLayout>
-        </AuthProvider>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>
+        }>
+          <AuthProvider>
+            <ConditionalLayout>
+              {children}
+            </ConditionalLayout>
+          </AuthProvider>
+        </Suspense>
       </body>
     </html>
   );

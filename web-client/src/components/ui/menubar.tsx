@@ -225,6 +225,7 @@ function MenubarSubTrigger({
   return (
     <MenubarPrimitive.SubTrigger
       data-slot="menubar-sub-trigger"
+      data-inset={inset}
       className={cn(
         "flex cursor-default select-none items-center rounded-base border-2 border-transparent px-3 py-1.5 text-sm font-base outline-hidden focus:border-border data-[state=open]:border-border data-[inset]:pl-8",
         className,

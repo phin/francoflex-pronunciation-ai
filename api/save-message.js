@@ -1,125 +1,89 @@
-import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  successResponse
+} from './_utils/http.js';
+import { ensureSessionOwnership, requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    const { author, session_id, content, audio_url, ai_feedback } = JSON.parse(event.body);
+    const {
+      author,
+      session_id: sessionId,
+      content,
+      audio_url: audioUrl,
+      ai_feedback: aiFeedback,
+      user_id
+    } = payload;
 
-    // Use ai_feedback as content if content is not provided (for system messages)
-    // For system messages without content, use a placeholder
-    let messageContent = content || ai_feedback || '';
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId({ user_id }, uid);
+
+    let messageContent = content || aiFeedback || '';
 
     if (!messageContent && author === 'system') {
       messageContent = '[System message]';
     }
 
-    if (!author || !session_id) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'author and session_id are required' })
-      };
+    if (!author || !sessionId) {
+      return errorResponse(400, 'author and session_id are required', headers);
     }
 
     if (!messageContent) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'content or ai_feedback is required for user messages' })
-      };
+      return errorResponse(400, 'content or ai_feedback is required for user messages', headers);
     }
 
-    // Validate author is either 'user' or 'system'
     if (author !== 'user' && author !== 'system') {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'author must be "user" or "system"' })
-      };
+      return errorResponse(400, 'author must be "user" or "system"', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
-    // Insert message (store audio_url in metadata)
+    await ensureSessionOwnership({
+      firestore,
+      sessionId,
+      userId
+    });
+
+    const messageRef = firestore.collection('messages').doc();
+    const now = new Date().toISOString();
     const messageData = {
-      author: author,
-      session: session_id,
+      id: messageRef.id,
+      user: userId,
+      author,
+      session: sessionId,
       content: messageContent,
-      created_at: new Date().toISOString()
+      created_at: now
     };
 
-    // Add audio_url to metadata if provided
-    if (audio_url) {
-      messageData.metadata = { audio_url: audio_url };
+    if (audioUrl) {
+      messageData.metadata = { audio_url: audioUrl };
     }
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert(messageData)
-      .select()
-      .single();
+    await messageRef.set(messageData);
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: data
-      })
-    };
-
+    return successResponse(messageData, headers);
   } catch (error) {
-    console.error('Save message error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to save message',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to save message');
   }
 }

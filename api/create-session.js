@@ -1,92 +1,61 @@
-import { getSupabaseClient } from './_utils/supabase.js';
+import {
+  createCorsHeaders,
+  ensureAllowedMethod,
+  errorResponse,
+  handleCors,
+  handleError,
+  successResponse
+} from './_utils/http.js';
+import { requireAuth, requireUserId } from './_utils/auth.js';
+import { getFirestoreClient } from './_utils/firestore.js';
 
 export async function handler(event, context) {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  const allowedMethods = ['POST'];
+  const headers = createCorsHeaders(allowedMethods);
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  const cors = handleCors(event, headers);
+  if (cors) return cors;
+
+  const methodError = ensureAllowedMethod(event, headers, allowedMethods);
+  if (methodError) return methodError;
+
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return errorResponse(400, 'Invalid JSON payload', headers);
   }
 
   try {
-    const { user_id, level, mode = 'repeat' } = JSON.parse(event.body);
+    const { uid } = await requireAuth(event);
+    const userId = requireUserId(payload, uid);
+    const { level, mode = 'repeat' } = payload;
 
-    if (!user_id || !level) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'user_id and level are required' })
-      };
+    if (!level) {
+      return errorResponse(400, 'level is required', headers);
     }
 
-    const supabase = getSupabaseClient();
+    const firestore = getFirestoreClient();
 
-    // Create session content based on level
     const sessionContent = generateSessionContent(level);
+    const now = new Date().toISOString();
 
-    // Insert new session
-    const { data, error } = await supabase
-      .from('sessions')
-      .insert({
-        user: user_id,
-        level: level,
-        mode: mode,
-        content: sessionContent,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        data: data
-      })
+    const sessionRef = firestore.collection('sessions').doc();
+    const sessionRecord = {
+      id: sessionRef.id,
+      user: userId,
+      level,
+      type: mode,
+      content: sessionContent,
+      created_at: now,
+      updated_at: now
     };
 
+    await sessionRef.set(sessionRecord);
+
+    return successResponse([sessionRecord], headers);
   } catch (error) {
-    console.error('Create session error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        error: 'Failed to create session',
-        details: error.message
-      })
-    };
+    return handleError(error, headers, 'Failed to create session');
   }
 }
 

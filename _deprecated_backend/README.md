@@ -1,11 +1,11 @@
 # Francoflex Backend
 
-A FastAPI-based backend for French pronunciation practice with AI-powered analysis.
+A FastAPI-based backend for French pronunciation practice with AI-powered analysis. This stack is retained for historical reference and is no longer the primary backend.
 
 ## 📁 Project Structure
 
 ```
-backend/
+_deprecated_backend/
 ├── api/                    # FastAPI application
 │   ├── __init__.py
 │   ├── main.py            # Main API application
@@ -33,8 +33,8 @@ backend/
 ### 1. Setup Environment
 
 ```bash
-# Navigate to backend directory
-cd backend
+# Navigate to legacy backend directory
+cd _deprecated_backend
 
 # Create virtual environment
 python -m venv venv

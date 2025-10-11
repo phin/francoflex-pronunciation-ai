@@ -2,14 +2,8 @@
 
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
-import { AppSidebar } from "../app/sidebar"
-import { DynamicBreadcrumb } from "@/components/dynamic-breadcrumb"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
 import { useAuth } from "@/contexts/AuthContext"
+import { TopNav } from "@/components/top-nav"
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -26,6 +20,12 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
       router.push('/voice_chat_activity')
     }
   }, [user, loading, pathname, router])
+
+  useEffect(() => {
+    if (!loading && !user && pathname !== "/") {
+      router.push("/")
+    }
+  }, [user, loading, pathname, router])
   
   // Show loading state while checking authentication
   if (loading) {
@@ -39,30 +39,16 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
     )
   }
   
-  // Don't show sidebar on the root page (login/auth page) or preferences page
-  if (pathname === "/" || pathname === "/preferences") {
-    return (
-      <div className="min-h-screen">
-        {children}
-      </div>
-    )
+  if (pathname === "/") {
+    return <div className="min-h-screen">{children}</div>
   }
-  
-  // Show sidebar for all other pages
+
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger className="-ml-1" />
-            <DynamicBreadcrumb />
-          </div>
-        </header>
-        <main className="flex-1">
-          {children}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="min-h-screen bg-background">
+      <TopNav />
+      <main className="mx-auto w-full max-w-6xl px-4 pb-10 pt-24">
+        {children}
+      </main>
+    </div>
   )
 }

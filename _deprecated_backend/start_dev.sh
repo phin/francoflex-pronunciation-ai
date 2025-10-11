@@ -26,8 +26,8 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # Start API server in background
-echo "🚀 Starting FastAPI server..."
-cd backend
+echo "🚀 Starting FastAPI server (legacy)..."
+cd _deprecated_backend
 source ../venv/bin/activate
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload &
 API_PID=$!
